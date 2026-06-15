@@ -9,6 +9,7 @@ from .db import init_db, connect
 from .evaluation import latest_deal_report
 from .paths import DB_PATH
 from .pipeline import run_collection
+from .web_admin import run_admin_server
 
 
 def _db_path(value: str | None) -> Path:
@@ -54,6 +55,11 @@ def cmd_review_queue(args: argparse.Namespace) -> None:
         )
 
 
+def cmd_admin_server(args: argparse.Namespace) -> None:
+    init_db(_db_path(args.db))
+    run_admin_server(host=args.host, port=args.port, db_path=_db_path(args.db))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="beauty-deal-radar")
     parser.add_argument("--db", help="SQLite DB path. Defaults to data/beauty_deals.sqlite3")
@@ -75,6 +81,11 @@ def build_parser() -> argparse.ArgumentParser:
     review_parser = sub.add_parser("review-queue", help="Show offers that need manual matching review")
     review_parser.add_argument("--limit", type=int, default=50)
     review_parser.set_defaults(func=cmd_review_queue)
+
+    admin_parser = sub.add_parser("admin-server", help="Run the local admin web UI")
+    admin_parser.add_argument("--host", default="127.0.0.1")
+    admin_parser.add_argument("--port", type=int, default=8765)
+    admin_parser.set_defaults(func=cmd_admin_server)
     return parser
 
 
@@ -86,4 +97,3 @@ def main(argv: list[str] | None = None) -> None:
 
 if __name__ == "__main__":
     main()
-

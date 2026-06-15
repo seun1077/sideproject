@@ -28,6 +28,7 @@ C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\p
 C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py collect
 C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py report
 C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py review-queue
+C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py admin-server
 ```
 
 The legacy shortcut still works:
@@ -40,6 +41,28 @@ The SQLite database is written to `data/beauty_deals.sqlite3`.
 CSV/JSON snapshots are written under `data/processed`.
 Raw HTML is only stored when `--keep-raw` is passed.
 
+## Admin Page
+
+Run the local admin server:
+
+```powershell
+C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py admin-server --host 127.0.0.1 --port 8765
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8765/
+```
+
+The admin page can:
+
+- run today's collection pipeline
+- show deal evaluations and publication status
+- open source/search links for manual verification
+- approve or reject deal publication
+- approve, reject, or exclude offer-product matches
+
 ## Backend Structure
 
 - `migrations/`: SQL schema migrations.
@@ -47,6 +70,7 @@ Raw HTML is only stored when `--keep-raw` is passed.
 - `src/beauty_deal_radar/repository.py`: SQLite writes and upserts.
 - `src/beauty_deal_radar/evaluation.py`: deal scoring.
 - `src/beauty_deal_radar/admin.py`: review queue queries.
+- `src/beauty_deal_radar/web_admin.py`: local admin web UI.
 - `docs/backend_architecture.md`: data model notes.
 
 ## Baseline logic

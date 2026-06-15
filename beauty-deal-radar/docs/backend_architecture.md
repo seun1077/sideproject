@@ -33,6 +33,9 @@ This lets us add new sources without changing the core product and deal judgment
 | `price_snapshots` | Time-series price observations. This is what eventually powers 30/90/180-day baselines. |
 | `deal_posts` | Hot-deal/community posts. They may or may not have a parsed price. |
 | `deal_evaluations` | The current judgment layer: best offer, market median, discount, score, confidence. |
+| `daily_product_price_stats` | Daily product-level price summaries used for 30/90-day baselines and long-term storage control. |
+| `review_decisions` | Human decisions for product matching and deal publication. |
+| `published_deals` | Deals explicitly published by an admin or future automation. |
 
 ## Matching Principles
 
@@ -69,3 +72,17 @@ Once daily snapshots exist, the score should prefer:
 
 The current median remains useful as a fallback when a product is newly added.
 
+## Admin Workflow
+
+Offer matching and deal publication are separate decisions.
+
+```text
+offer match approval
+  = this marketplace result is the same canonical product
+
+deal publication approval
+  = today's price is worth showing as a hot deal
+```
+
+Approved offers keep contributing to future price snapshots.
+Deal evaluations are recalculated every collection run because a valid product can be a hot deal today and a normal price tomorrow.
