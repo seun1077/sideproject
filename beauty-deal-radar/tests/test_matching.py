@@ -24,6 +24,14 @@ class TextNormalizationTest(unittest.TestCase):
         title = "라운드랩 자작나무 수분 선크림 50ml+50ml+50ml"
         self.assertEqual(parse_pack_count(title, parse_volume("50ml")), 3)
 
+    def test_pack_count_handles_danawa_main_item_bundle(self) -> None:
+        title = "메디힐 마데카소사이드 흔적 패드 100매 (본품2개)"
+        self.assertEqual(parse_pack_count(title, parse_volume("100매")), 2)
+
+    def test_pack_count_handles_danawa_main_and_refill_bundle(self) -> None:
+        title = "메디힐 마데카소사이드 흔적 패드 100매 (본품1개+리필1개)"
+        self.assertEqual(parse_pack_count(title, parse_volume("100매")), 2)
+
     def test_pack_count_does_not_count_gift_volume_bundle(self) -> None:
         title = "조선 미녀 맑은 쌀 선크림 50ml 기획 (+10ml x 2개)"
         self.assertEqual(parse_pack_count(title, parse_volume("50ml")), 1)

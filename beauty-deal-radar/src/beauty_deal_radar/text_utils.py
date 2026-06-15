@@ -79,6 +79,28 @@ def parse_pack_count(text: str | None, target_volume: tuple[float, str] | None =
         if plus_counts:
             return max(plus_counts)
 
+        parenthetical_bundle = re.compile(
+            rf"{target_pattern}\s*[\(\[]\s*([^\)\]]*(?:본품|리필)[^\)\]]*)[\)\]]",
+            re.IGNORECASE,
+        )
+        bundle_counts = []
+        for match in parenthetical_bundle.finditer(text):
+            counts = [int(value) for value in re.findall(r"(\d+)\s*(?:개|입)", match.group(1))]
+            total = sum(counts)
+            if 1 <= total <= 20:
+                bundle_counts.append(total)
+        if bundle_counts:
+            return max(bundle_counts)
+
+        parenthetical = re.compile(
+            rf"{target_pattern}\s*[\(\[]?\s*(?:본품|리필)?\s*(\d+)\s*(?:개|입)\s*[\)\]]?",
+            re.IGNORECASE,
+        )
+        parenthetical_counts = [int(match.group(1)) for match in parenthetical.finditer(text)]
+        parenthetical_counts = [count for count in parenthetical_counts if 1 <= count <= 20]
+        if parenthetical_counts:
+            return max(parenthetical_counts)
+
         exact = re.compile(
             rf"{target_pattern}\s*(?:x|X|×|\*|\s)?\s*(\d+)\s*(?:개|입|set|SET|세트)?",
             re.IGNORECASE,

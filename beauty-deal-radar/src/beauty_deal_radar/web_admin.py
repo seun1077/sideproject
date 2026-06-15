@@ -102,6 +102,19 @@ def deal_evidence(row) -> tuple[str, str]:
     return ("판정 근거 부족", "가격 표본이 더 필요합니다.")
 
 
+def offer_package_note(row) -> str:
+    parts = []
+    if row["best_package_price_krw"] and row["best_package_price_krw"] != row["current_min_price_krw"]:
+        parts.append(f"묶음가 {money(row['best_package_price_krw'])}")
+    if row["best_pack_count"] and int(row["best_pack_count"]) > 1:
+        parts.append(f"{int(row['best_pack_count'])}개 기준")
+    if row["best_volume_value"] and row["best_volume_unit"]:
+        value = float(row["best_volume_value"])
+        volume = f"{value:g}{row['best_volume_unit']}"
+        parts.append(volume)
+    return " · ".join(parts)
+
+
 def search_links(query: str) -> str:
     encoded = urllib.parse.quote(query)
     links = [
@@ -266,6 +279,7 @@ def render_dashboard(db_path: Path, message: str = "") -> bytes:
         query = f"{row['brand']} {row['product']}"
         evidence, evidence_detail = deal_evidence(row)
         flags = deal_review_flags(row)
+        package_note = offer_package_note(row)
         if is_safe_auto_publish_candidate(row):
             review_hint = '<span class="safe">자동 공개 가능</span>'
         elif flags:
@@ -280,7 +294,7 @@ def render_dashboard(db_path: Path, message: str = "") -> bytes:
                 <div class="sub">{esc(row['best_title'])}</div>
                 <div class="sub">{search_links(query)}</div>
               </td>
-              <td>{money(row['current_min_price_krw'])}</td>
+              <td>{money(row['current_min_price_krw'])}<div class="sub">{esc(package_note)}</div></td>
               <td><div class="explain">{esc(evidence)}</div><div class="sub">{esc(evidence_detail)}</div><div class="sub">{review_hint}</div></td>
               <td><strong>{row['deal_score']}</strong><div class="sub">{esc(confidence_label(row['confidence']))}</div></td>
               <td><span class="badge {esc(row['publication_status'])}">{esc(publication_label(row['publication_status']))}</span></td>

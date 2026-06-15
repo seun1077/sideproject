@@ -13,6 +13,44 @@ from ..repository import seed_key
 from ..text_utils import clean, parse_pack_count, parse_price, parse_volume
 
 
+def parse_danawa_detail_page(body: str) -> tuple[str | None, int | None]:
+    doc = html.fromstring(body)
+    title_candidates = doc.xpath(
+        "//meta[@name='Title']/@content | "
+        "//meta[@property='og:title']/@content | "
+        "//title/text()"
+    )
+    title = None
+    for candidate in title_candidates:
+        cleaned = clean(candidate)
+        cleaned = re.sub(r"^\[?다나와\]?\s*", "", cleaned)
+        cleaned = re.sub(r"\s*:\s*다나와\s*가격비교\s*$", "", cleaned)
+        if cleaned:
+            title = cleaned
+            break
+
+    price_candidates = doc.xpath(
+        "//meta[@property='og:description']/@content | "
+        "//meta[@name='Description']/@content"
+    )
+    price = None
+    for candidate in price_candidates:
+        price = parse_price(candidate)
+        if price is not None:
+            break
+    return title, price
+
+
+def fetch_danawa_detail(link: str) -> tuple[str | None, int | None]:
+    parsed = urllib.parse.urlparse(link)
+    if "prod.danawa.com" not in parsed.netloc or not parsed.path.startswith("/info/"):
+        return None, None
+    status, body, _error = fetch(link)
+    if status != 200 or not body:
+        return None, None
+    return parse_danawa_detail_page(body)
+
+
 def parse_danawa_item_price(item) -> int | None:
     price_texts = item.xpath(
         ".//*[contains(@class, 'price_sect') and "
@@ -69,6 +107,11 @@ def collect_danawa_for_seed(
         price = parse_danawa_item_price(item)
         links = item.xpath(".//*[contains(@class, 'prod_name')]//a/@href | .//a/@href")
         link = links[0] if links else url
+        detail_title, detail_price = fetch_danawa_detail(link)
+        if detail_title:
+            title = detail_title
+        if detail_price:
+            price = detail_price
         key = (title, price, link)
         if key in seen:
             continue
@@ -99,4 +142,3 @@ def collect_danawa_for_seed(
         if len(offers) >= limit:
             break
     return offers
-
