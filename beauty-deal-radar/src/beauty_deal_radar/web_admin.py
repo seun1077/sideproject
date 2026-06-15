@@ -116,12 +116,14 @@ def search_links(query: str) -> str:
     )
 
 
-def layout(content: str, message: str = "") -> bytes:
+def layout(content: str, message: str = "", auto_refresh: bool = False) -> bytes:
+    refresh_tag = '<meta http-equiv="refresh" content="5">' if auto_refresh else ""
     body = f"""<!doctype html>
 <html lang="ko">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  {refresh_tag}
   <title>Beauty Deal Radar Admin</title>
   <style>
     :root {{
@@ -338,7 +340,14 @@ def render_dashboard(db_path: Path, message: str = "") -> bytes:
       </table>
     </section>
     """
-    return layout(metric_html + deal_html + queue_html, message=message or APP_STATE.get("last_message", ""))
+    latest_status = latest_run.get("status")
+    display_message = message or APP_STATE.get("last_message", "")
+    auto_refresh = latest_status == "running"
+    if auto_refresh:
+        display_message = "수집 중입니다. 완료될 때까지 5초마다 자동 새로고침합니다."
+    elif display_message == "이미 수집이 실행 중입니다.":
+        display_message = ""
+    return layout(metric_html + deal_html + queue_html, message=display_message, auto_refresh=auto_refresh)
 
 
 class AdminHandler(BaseHTTPRequestHandler):
