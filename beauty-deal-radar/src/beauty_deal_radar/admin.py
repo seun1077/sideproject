@@ -25,13 +25,8 @@ def review_queue(conn: sqlite3.Connection, limit: int = 50) -> list[sqlite3.Row]
             o.url
         FROM offers o
         LEFT JOIN canonical_products cp ON cp.id = o.product_id
-        WHERE o.match_status IN ('candidate', 'excluded', 'rejected')
+        WHERE o.match_status = 'candidate'
         ORDER BY
-            CASE o.match_status
-                WHEN 'candidate' THEN 0
-                WHEN 'excluded' THEN 1
-                ELSE 2
-            END,
             o.match_score DESC,
             o.last_seen_at DESC
         LIMIT ?
@@ -55,7 +50,15 @@ def dashboard_metrics(conn: sqlite3.Connection) -> dict:
         "offers": conn.execute("SELECT COUNT(*) FROM offers").fetchone()[0],
         "price_snapshots": conn.execute("SELECT COUNT(*) FROM price_snapshots").fetchone()[0],
         "review_queue": conn.execute(
-            "SELECT COUNT(*) FROM offers WHERE match_status IN ('candidate', 'excluded', 'rejected')"
+            "SELECT COUNT(*) FROM offers WHERE match_status = 'candidate'"
+        ).fetchone()[0],
+        "deal_review_queue": conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM deal_evaluations
+            WHERE run_id = (SELECT MAX(id) FROM collection_runs WHERE status = 'success')
+              AND publication_status IN ('auto_approved', 'needs_review')
+            """
         ).fetchone()[0],
         "auto_approved_deals": conn.execute(
             "SELECT COUNT(*) FROM deal_evaluations WHERE publication_status = 'auto_approved'"

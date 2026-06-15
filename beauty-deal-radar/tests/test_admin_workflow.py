@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 import unittest
 
-from beauty_deal_radar.admin import auto_publish_safe_deals, deal_review_flags, latest_deal_cards
+from beauty_deal_radar.admin import auto_publish_safe_deals, deal_review_flags, latest_deal_cards, review_queue
 from beauty_deal_radar.db import apply_migrations
 from beauty_deal_radar.repository import upsert_default_sources
 
@@ -100,6 +100,19 @@ class AdminWorkflowTest(unittest.TestCase):
         self.assertEqual(result["published"], 0)
         self.assertEqual(published, 0)
         self.assertIn("할인율 과도함", flags)
+
+    def test_match_review_queue_only_shows_pending_candidates(self) -> None:
+        with make_conn() as conn:
+            seed_deal(conn, prices=[10000, 11000, 11200, 13000, 14000, 16000])
+            first_offer = conn.execute("SELECT id FROM offers ORDER BY id LIMIT 1").fetchone()["id"]
+            second_offer = conn.execute("SELECT id FROM offers ORDER BY id LIMIT 1 OFFSET 1").fetchone()["id"]
+            conn.execute("UPDATE offers SET match_status = 'excluded' WHERE id = ?", (first_offer,))
+            conn.execute("UPDATE offers SET match_status = 'rejected' WHERE id = ?", (second_offer,))
+
+            rows = review_queue(conn, limit=10)
+
+        self.assertEqual(len(rows), 4)
+        self.assertTrue(all(row["match_status"] == "candidate" for row in rows))
 
 
 if __name__ == "__main__":

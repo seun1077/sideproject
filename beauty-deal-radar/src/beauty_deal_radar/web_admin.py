@@ -25,6 +25,8 @@ from .repository import upsert_default_sources
 
 
 APP_STATE = {"collecting": False, "last_message": ""}
+DAILY_DEAL_REVIEW_LIMIT = 10
+DAILY_MATCH_REVIEW_LIMIT = 10
 
 PUBLICATION_LABELS = {
     "auto_approved": "자동 후보",
@@ -232,19 +234,24 @@ def render_dashboard(db_path: Path, message: str = "") -> bytes:
         apply_migrations(conn)
         upsert_default_sources(conn)
         metrics = dashboard_metrics(conn)
-        deals = latest_deal_cards(conn, limit=40)
-        queue = review_queue(conn, limit=40)
+        deal_backlog = [
+            row
+            for row in latest_deal_cards(conn, limit=200)
+            if row["publication_status"] in {"auto_approved", "needs_review"}
+        ]
+        deals = deal_backlog[:DAILY_DEAL_REVIEW_LIMIT]
+        queue = review_queue(conn, limit=DAILY_MATCH_REVIEW_LIMIT)
 
     latest_run = metrics["latest_run"] or {}
-    safe_auto_count = sum(1 for row in deals if is_safe_auto_publish_candidate(row))
+    safe_auto_count = sum(1 for row in deal_backlog if is_safe_auto_publish_candidate(row))
     metric_html = f"""
     <section class="grid">
       <div class="metric"><div class="label">상품</div><div class="value">{metrics['products']}</div></div>
       <div class="metric"><div class="label">오퍼</div><div class="value">{metrics['offers']}</div></div>
       <div class="metric"><div class="label">가격 스냅샷</div><div class="value">{metrics['price_snapshots']}</div></div>
-      <div class="metric"><div class="label">검수 큐</div><div class="value">{metrics['review_queue']}</div></div>
+      <div class="metric"><div class="label">오늘 가격 검증</div><div class="value">{len(deals)}/{metrics['deal_review_queue']}</div></div>
+      <div class="metric"><div class="label">오늘 상품 매칭</div><div class="value">{len(queue)}/{metrics['review_queue']}</div></div>
       <div class="metric"><div class="label">안전 후보</div><div class="value">{safe_auto_count}</div></div>
-      <div class="metric"><div class="label">확인 필요</div><div class="value">{metrics['needs_review_deals']}</div></div>
     </section>
     <section class="panel">
       <h2>최근 실행</h2>
@@ -288,7 +295,8 @@ def render_dashboard(db_path: Path, message: str = "") -> bytes:
         )
     deal_html = f"""
     <section class="panel">
-      <h2>특가 후보 판정</h2>
+      <h2>오늘 가격 검증 10개</h2>
+      <div class="sub">전체 후보를 다 보지 않고, 오늘은 상위 {DAILY_DEAL_REVIEW_LIMIT}개만 봅니다. 안전 후보는 상단 버튼으로 일괄 공개하고, 이상 징후가 있는 후보만 직접 확인하세요.</div>
       <table>
         <thead><tr><th>상품</th><th>현재가</th><th>왜 후보인가</th><th>점수/근거</th><th>공개 상태</th><th>검수</th></tr></thead>
         <tbody>{''.join(deal_rows) or '<tr><td colspan="6">아직 평가 데이터가 없습니다.</td></tr>'}</tbody>
@@ -322,7 +330,8 @@ def render_dashboard(db_path: Path, message: str = "") -> bytes:
         )
     queue_html = f"""
     <section class="panel">
-      <h2>상품 매칭 검수</h2>
+      <h2>오늘 상품 매칭 검수 10개</h2>
+      <div class="sub">자동 제외/반려된 후보는 오늘 업무에서 제외하고, 가격 기준에 들어갈 가능성이 있는 같은 상품 후보만 {DAILY_MATCH_REVIEW_LIMIT}개 보여줍니다.</div>
       <table>
         <thead><tr><th>수집된 판매처 상품</th><th>보정가</th><th>매칭 상태</th><th>검수</th></tr></thead>
         <tbody>{''.join(queue_rows) or '<tr><td colspan="4">검수할 후보가 없습니다.</td></tr>'}</tbody>

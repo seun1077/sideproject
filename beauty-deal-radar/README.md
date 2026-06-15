@@ -105,6 +105,7 @@ The admin page can:
 - show deal evaluations and publication status
 - open source/search links for manual verification
 - bulk-publish low-risk automatic candidates
+- limit daily manual work to 10 deal/price checks and 10 product-match checks
 - approve or reject deal publication
 - exclude a best offer when the comparison site price does not match the seller landing page
 - approve, reject, or exclude offer-product matches
