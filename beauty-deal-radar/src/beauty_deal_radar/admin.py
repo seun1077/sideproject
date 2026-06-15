@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 import sqlite3
 
 from .repository import utc_now
@@ -87,7 +88,44 @@ def latest_deal_cards(conn: sqlite3.Connection, limit: int = 30) -> list[sqlite3
             de.confidence,
             o.id AS offer_id,
             o.title AS best_title,
-            o.url AS best_url
+            o.url AS best_url,
+            o.match_score AS best_match_score,
+            o.match_status AS best_match_status,
+            o.baseline_eligible AS best_baseline_eligible,
+            (
+                SELECT COUNT(*)
+                FROM offers ox
+                WHERE ox.product_id = de.product_id
+                  AND ox.baseline_eligible = 1
+                  AND ox.normalized_price_krw IS NOT NULL
+                  AND ox.match_status IN ('candidate', 'approved')
+            ) AS offer_count,
+            (
+                SELECT COUNT(*)
+                FROM offers ox
+                WHERE ox.product_id = de.product_id
+                  AND ox.baseline_eligible = 1
+                  AND ox.normalized_price_krw IS NOT NULL
+                  AND ox.match_status = 'approved'
+            ) AS approved_offer_count,
+            (
+                SELECT COUNT(*)
+                FROM offers ox
+                WHERE ox.product_id = de.product_id
+                  AND ox.baseline_eligible = 1
+                  AND ox.normalized_price_krw IS NOT NULL
+                  AND ox.match_status IN ('candidate', 'approved')
+                  AND ox.normalized_price_krw <= de.current_min_price_krw * 1.15
+            ) AS near_price_count,
+            (
+                SELECT MIN(ox.normalized_price_krw)
+                FROM offers ox
+                WHERE ox.product_id = de.product_id
+                  AND ox.id != de.best_offer_id
+                  AND ox.baseline_eligible = 1
+                  AND ox.normalized_price_krw IS NOT NULL
+                  AND ox.match_status IN ('candidate', 'approved')
+            ) AS second_price_krw
         FROM deal_evaluations de
         JOIN canonical_products cp ON cp.id = de.product_id
         LEFT JOIN offers o ON o.id = de.best_offer_id
@@ -105,6 +143,67 @@ def latest_deal_cards(conn: sqlite3.Connection, limit: int = 30) -> list[sqlite3
         """,
         (limit,),
     ).fetchall()
+
+
+def strongest_discount(row: Mapping[str, object]) -> float | None:
+    values = [row["discount_vs_30d_pct"], row["discount_vs_market_pct"]]
+    numeric = [float(value) for value in values if value is not None]
+    return max(numeric, default=None)
+
+
+def deal_review_flags(row: Mapping[str, object]) -> list[str]:
+    flags: list[str] = []
+    discount = strongest_discount(row)
+    current_min = int(row["current_min_price_krw"] or 0)
+    second_price = row["second_price_krw"]
+    offer_count = int(row["offer_count"] or 0)
+    near_price_count = int(row["near_price_count"] or 0)
+    best_match_score = int(row["best_match_score"] or 0)
+
+    if row["publication_status"] not in {"auto_approved", "approved"}:
+        flags.append("자동 공개 대상 아님")
+    if row["best_match_status"] not in {"candidate", "approved"} or not row["best_baseline_eligible"]:
+        flags.append("최저가 상품 매칭 미확정")
+    if best_match_score < 90:
+        flags.append("매칭 점수 낮음")
+    if row["confidence"] == "low" or offer_count < 6:
+        flags.append("가격 표본 부족")
+    if discount is None:
+        flags.append("할인 근거 부족")
+    elif discount > 55:
+        flags.append("할인율 과도함")
+    elif discount < 25:
+        flags.append("할인율 낮음")
+    if second_price is None:
+        flags.append("비교 가능한 2순위 가격 없음")
+    elif current_min > 0 and int(second_price) > current_min * 1.35:
+        flags.append("최저가만 심하게 튐")
+    if near_price_count < 2:
+        flags.append("근접 가격 후보 부족")
+    return flags
+
+
+def is_safe_auto_publish_candidate(row: Mapping[str, object]) -> bool:
+    return row["publication_status"] == "auto_approved" and not deal_review_flags(row)
+
+
+def auto_publish_safe_deals(conn: sqlite3.Connection, limit: int = 200) -> dict:
+    rows = latest_deal_cards(conn, limit=limit)
+    checked = 0
+    published = 0
+    skipped = 0
+    for row in rows:
+        if row["publication_status"] != "auto_approved":
+            continue
+        checked += 1
+        if not is_safe_auto_publish_candidate(row):
+            skipped += 1
+            continue
+        if row["offer_id"]:
+            decide_offer(conn, int(row["offer_id"]), "approve_match", reason="safe_auto_publish")
+        decide_deal(conn, int(row["evaluation_id"]), "approve_deal", reason="safe_auto_publish")
+        published += 1
+    return {"checked_auto_candidates": checked, "published": published, "skipped_for_review": skipped}
 
 
 def decide_offer(conn: sqlite3.Connection, offer_id: int, decision: str, reason: str | None = None) -> None:

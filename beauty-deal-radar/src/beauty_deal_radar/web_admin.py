@@ -8,7 +8,16 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from .admin import dashboard_metrics, decide_deal, decide_offer, latest_deal_cards, review_queue
+from .admin import (
+    auto_publish_safe_deals,
+    dashboard_metrics,
+    deal_review_flags,
+    decide_deal,
+    decide_offer,
+    is_safe_auto_publish_candidate,
+    latest_deal_cards,
+    review_queue,
+)
 from .db import apply_migrations, connect
 from .paths import DB_PATH
 from .pipeline import run_collection
@@ -169,6 +178,8 @@ def layout(content: str, message: str = "") -> bytes:
     .needs_review, .candidate {{ color: var(--warn); border-color: #fde68a; background: #fffbeb; }}
     .rejected, .excluded {{ color: var(--danger); border-color: #fecaca; background: #fef2f2; }}
     .draft {{ color: var(--muted); background: #f8fafc; }}
+    .safe {{ color: var(--ok); }}
+    .risk {{ color: var(--danger); }}
     .actions {{ display: flex; flex-wrap: wrap; gap: 6px; }}
     button, .button {{
       appearance: none;
@@ -198,9 +209,14 @@ def layout(content: str, message: str = "") -> bytes:
 <body>
   <header>
     <h1>Beauty Deal Radar Admin</h1>
-    <form method="post" action="/collect">
-      <button class="primary" type="submit">오늘 데이터 수집</button>
-    </form>
+    <div class="actions">
+      <form method="post" action="/auto-publish-safe">
+        <button type="submit" title="가격 표본, 매칭 점수, 할인율이 안전 범위인 자동 후보만 공개합니다.">안전 후보 일괄 공개</button>
+      </form>
+      <form method="post" action="/collect">
+        <button class="primary" type="submit">오늘 데이터 수집</button>
+      </form>
+    </div>
   </header>
   <main>
     {f'<div class="message">{esc(message)}</div>' if message else ''}
@@ -220,13 +236,14 @@ def render_dashboard(db_path: Path, message: str = "") -> bytes:
         queue = review_queue(conn, limit=40)
 
     latest_run = metrics["latest_run"] or {}
+    safe_auto_count = sum(1 for row in deals if is_safe_auto_publish_candidate(row))
     metric_html = f"""
     <section class="grid">
       <div class="metric"><div class="label">상품</div><div class="value">{metrics['products']}</div></div>
       <div class="metric"><div class="label">오퍼</div><div class="value">{metrics['offers']}</div></div>
       <div class="metric"><div class="label">가격 스냅샷</div><div class="value">{metrics['price_snapshots']}</div></div>
       <div class="metric"><div class="label">검수 큐</div><div class="value">{metrics['review_queue']}</div></div>
-      <div class="metric"><div class="label">자동 후보</div><div class="value">{metrics['auto_approved_deals']}</div></div>
+      <div class="metric"><div class="label">안전 후보</div><div class="value">{safe_auto_count}</div></div>
       <div class="metric"><div class="label">확인 필요</div><div class="value">{metrics['needs_review_deals']}</div></div>
     </section>
     <section class="panel">
@@ -239,6 +256,13 @@ def render_dashboard(db_path: Path, message: str = "") -> bytes:
     for row in deals:
         query = f"{row['brand']} {row['product']}"
         evidence, evidence_detail = deal_evidence(row)
+        flags = deal_review_flags(row)
+        if is_safe_auto_publish_candidate(row):
+            review_hint = '<span class="safe">자동 공개 가능</span>'
+        elif flags:
+            review_hint = '<span class="risk">검수 필요: ' + esc(", ".join(flags[:3])) + "</span>"
+        else:
+            review_hint = "검수 완료 또는 보류"
         deal_rows.append(
             f"""
             <tr>
@@ -248,7 +272,7 @@ def render_dashboard(db_path: Path, message: str = "") -> bytes:
                 <div class="sub">{search_links(query)}</div>
               </td>
               <td>{money(row['current_min_price_krw'])}</td>
-              <td><div class="explain">{esc(evidence)}</div><div class="sub">{esc(evidence_detail)}</div></td>
+              <td><div class="explain">{esc(evidence)}</div><div class="sub">{esc(evidence_detail)}</div><div class="sub">{review_hint}</div></td>
               <td><strong>{row['deal_score']}</strong><div class="sub">{esc(confidence_label(row['confidence']))}</div></td>
               <td><span class="badge {esc(row['publication_status'])}">{esc(publication_label(row['publication_status']))}</span></td>
               <td>
@@ -325,6 +349,8 @@ class AdminHandler(BaseHTTPRequestHandler):
         try:
             if parsed.path == "/collect":
                 self._handle_collect()
+            elif parsed.path == "/auto-publish-safe":
+                self._handle_auto_publish_safe()
             elif parsed.path == "/offer-decision":
                 self._handle_offer_decision(form)
             elif parsed.path == "/deal-decision":
@@ -346,6 +372,12 @@ class AdminHandler(BaseHTTPRequestHandler):
             APP_STATE["last_message"] = "수집 완료: " + json.dumps(summary, ensure_ascii=False)
         finally:
             APP_STATE["collecting"] = False
+
+    def _handle_auto_publish_safe(self) -> None:
+        with connect(self.db_path) as conn:
+            apply_migrations(conn)
+            result = auto_publish_safe_deals(conn)
+        APP_STATE["last_message"] = "안전 후보 일괄 공개 완료: " + json.dumps(result, ensure_ascii=False)
 
     def _handle_offer_decision(self, form: dict[str, list[str]]) -> None:
         offer_id = int(form.get("id", ["0"])[0])

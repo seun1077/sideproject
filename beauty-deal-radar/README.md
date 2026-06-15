@@ -104,6 +104,7 @@ The admin page can:
 - run today's collection pipeline
 - show deal evaluations and publication status
 - open source/search links for manual verification
+- bulk-publish low-risk automatic candidates
 - approve or reject deal publication
 - exclude a best offer when the comparison site price does not match the seller landing page
 - approve, reject, or exclude offer-product matches

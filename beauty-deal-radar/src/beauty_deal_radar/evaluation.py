@@ -89,7 +89,7 @@ def publication_status_for(
     )
     if strongest_discount is None:
         return "draft"
-    if offer_count >= 5 and confidence in {"medium", "high"} and strongest_discount >= 25:
+    if offer_count >= 5 and confidence in {"medium", "high"} and 25 <= strongest_discount <= 55:
         return "auto_approved"
     if strongest_discount >= 15:
         return "needs_review"
