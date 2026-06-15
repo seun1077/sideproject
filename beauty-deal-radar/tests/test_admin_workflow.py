@@ -3,7 +3,14 @@ from __future__ import annotations
 import sqlite3
 import unittest
 
-from beauty_deal_radar.admin import auto_publish_safe_deals, deal_review_flags, latest_deal_cards, review_queue
+from beauty_deal_radar.admin import (
+    auto_publish_safe_deals,
+    deal_review_flags,
+    decide_source_deal,
+    latest_deal_cards,
+    review_queue,
+    source_deal_queue,
+)
 from beauty_deal_radar.db import apply_migrations
 from beauty_deal_radar.repository import upsert_default_sources
 
@@ -123,6 +130,42 @@ class AdminWorkflowTest(unittest.TestCase):
 
         self.assertEqual(len(rows), 4)
         self.assertTrue(all(row["match_status"] == "candidate" for row in rows))
+
+    def test_source_deal_queue_and_decision_workflow(self) -> None:
+        with make_conn() as conn:
+            product_id = conn.execute(
+                """
+                INSERT INTO canonical_products (
+                    canonical_key, brand, name, category, target_volume_value,
+                    target_volume_unit, canonical_query
+                )
+                VALUES ('test-cream', '테스트', '크림', '크림', 50, 'ml', '테스트 크림')
+                RETURNING id
+                """
+            ).fetchone()["id"]
+            source_id = conn.execute("SELECT id FROM sources WHERE code = 'algumon'").fetchone()["id"]
+            deal_post_id = conn.execute(
+                """
+                INSERT INTO deal_posts (
+                    source_id, source_post_key, product_id, title, url, collected_at,
+                    extracted_price_krw, matched_keywords, match_score
+                )
+                VALUES (?, 'post-1', ?, '테스트 크림 특가 9900원', 'https://example.com/deal',
+                        '2026-06-15T00:00:00Z', 9900, '테스트,크림', 80)
+                RETURNING id
+                """,
+                (source_id, product_id),
+            ).fetchone()["id"]
+
+            rows = source_deal_queue(conn, limit=10)
+            decide_source_deal(conn, deal_post_id, "approve_source_deal")
+            reviewed = conn.execute("SELECT COUNT(*) FROM source_deal_reviews").fetchone()[0]
+            status = conn.execute("SELECT match_status FROM deal_posts WHERE id = ?", (deal_post_id,)).fetchone()[0]
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["title"], "테스트 크림 특가 9900원")
+        self.assertEqual(status, "approved")
+        self.assertEqual(reviewed, 1)
 
 
 if __name__ == "__main__":

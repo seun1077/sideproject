@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .db import apply_migrations, connect
 from .paths import DB_PATH
-from .public_api import categories, list_deals, list_products, price_history, service_summary
+from .public_api import categories, list_deals, list_products, list_source_deals, price_history, service_summary
 from .repository import upsert_default_sources
 
 
@@ -308,7 +308,7 @@ INDEX_HTML = """<!doctype html>
         <div class="metric"><span>상품</span><strong id="metricProducts">0</strong></div>
         <div class="metric"><span>오퍼</span><strong id="metricOffers">0</strong></div>
         <div class="metric"><span>스냅샷</span><strong id="metricSnapshots">0</strong></div>
-        <div class="metric"><span>딜 후보</span><strong id="metricDeals">0</strong></div>
+        <div class="metric"><span>승인 특가</span><strong id="metricDeals">0</strong></div>
       </div>
     </div>
   </header>
@@ -324,7 +324,7 @@ INDEX_HTML = """<!doctype html>
     </div>
     <div class="content">
       <section>
-        <h2 class="section-title">오늘의 가격 신호</h2>
+        <h2 class="section-title">오늘의 특가 피드</h2>
         <div id="dealGrid" class="deal-grid"></div>
         <h2 class="section-title">추적 상품</h2>
         <div id="productList" class="product-list"></div>
@@ -364,7 +364,7 @@ INDEX_HTML = """<!doctype html>
     async function load() {
       const [summary, deals, products, categories] = await Promise.all([
         getJson("/api/summary"),
-        getJson("/api/deals?visibility=public&limit=60"),
+        getJson("/api/source-deals?visibility=public&limit=60"),
         getJson("/api/products?limit=200"),
         getJson("/api/categories"),
       ]);
@@ -383,7 +383,7 @@ INDEX_HTML = """<!doctype html>
       document.getElementById("metricProducts").textContent = summary.products ?? 0;
       document.getElementById("metricOffers").textContent = summary.offers ?? 0;
       document.getElementById("metricSnapshots").textContent = summary.price_snapshots ?? 0;
-      document.getElementById("metricDeals").textContent = summary.deal_candidates ?? 0;
+      document.getElementById("metricDeals").textContent = summary.approved_source_deals ?? 0;
       const latest = summary.latest_success?.finished_at || summary.latest_run?.finished_at;
       document.getElementById("runMeta").textContent = latest
         ? `최근 수집 ${latest}`
@@ -431,7 +431,7 @@ INDEX_HTML = """<!doctype html>
       const grid = document.getElementById("dealGrid");
       const deals = filteredDeals();
       if (!deals.length) {
-        grid.innerHTML = `<div class="empty" style="grid-column: 1 / -1"><strong>공개된 특가가 없습니다.</strong><span>관리자 페이지에서 판매처 가격과 상품 매칭을 확인한 뒤 공개 승인하면 이 영역에 표시됩니다.</span></div>`;
+        grid.innerHTML = `<div class="empty" style="grid-column: 1 / -1"><strong>공개된 특가가 없습니다.</strong><span>관리자에서 커뮤니티/몰 특가 소스를 승인하면 이 영역에 표시됩니다.</span></div>`;
         return;
       }
       grid.innerHTML = deals.map((deal) => `
@@ -441,14 +441,14 @@ INDEX_HTML = """<!doctype html>
             <div class="deal-title">${escapeHtml(deal.brand)} ${escapeHtml(deal.product)}</div>
             <div class="deal-sub">${escapeHtml(deal.title || "")}</div>
             <div class="price-line">
-              <span class="price-label">후보가</span>
+              <span class="price-label">특가가</span>
               <span class="price">${won(deal.current_price_krw)}</span>
               <span class="discount">${won(deal.price_gap_krw)} 저렴 · ${pct(deal.discount_pct)}</span>
             </div>
-            <div class="meta">현재 수집 시중가 ${won(deal.reference_price_krw)} · ${deal.discount_basis === "30d" ? "30일 중앙가 기준" : "오늘 수집 중앙가 기준"} · ${escapeHtml(deal.source || "-")}</div>
+            <div class="meta">비교 기준가 ${won(deal.reference_price_krw)} · ${deal.discount_basis === "30d" ? "30일 중앙가 기준" : "오늘 수집 중앙가 기준"} · ${escapeHtml(deal.source || "-")}</div>
             ${renderOptions(deal)}
             <div class="actions">
-              ${deal.url ? `<a class="button" href="${escapeHtml(deal.url)}" target="_blank" rel="noreferrer">판매처</a>` : ""}
+              ${deal.url ? `<a class="button" href="${escapeHtml(deal.url)}" target="_blank" rel="noreferrer">특가 원문</a>` : ""}
             </div>
           </div>
         </article>
@@ -612,6 +612,19 @@ class PublicHandler(BaseHTTPRequestHandler):
                     self._send_json(
                         {
                             "items": list_deals(
+                                conn,
+                                limit=_int_query(query, "limit", 30),
+                                category=_query_value(query, "category"),
+                                min_discount=_float_query(query, "min_discount"),
+                                visibility=_query_value(query, "visibility", "all") or "all",
+                            )
+                        }
+                    )
+            elif path == "/api/source-deals":
+                with self._conn() as conn:
+                    self._send_json(
+                        {
+                            "items": list_source_deals(
                                 conn,
                                 limit=_int_query(query, "limit", 30),
                                 category=_query_value(query, "category"),

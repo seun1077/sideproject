@@ -4,6 +4,8 @@ admin-server*.log
 public-server*.log
 data/*.sqlite3
 data/*.sqlite3-*
+data/*.sqlite
+data/*.sqlite-*
 data/processed/*.csv
 data/processed/*.json
 data/raw/**/*.html

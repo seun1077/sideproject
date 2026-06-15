@@ -52,6 +52,12 @@ def dashboard_metrics(conn: sqlite3.Connection) -> dict:
         "review_queue": conn.execute(
             "SELECT COUNT(*) FROM offers WHERE match_status = 'candidate'"
         ).fetchone()[0],
+        "source_deal_queue": conn.execute(
+            "SELECT COUNT(*) FROM deal_posts WHERE match_status = 'candidate'"
+        ).fetchone()[0],
+        "approved_source_deals": conn.execute(
+            "SELECT COUNT(*) FROM deal_posts WHERE match_status = 'approved'"
+        ).fetchone()[0],
         "deal_review_queue": conn.execute(
             """
             SELECT COUNT(*)
@@ -68,6 +74,53 @@ def dashboard_metrics(conn: sqlite3.Connection) -> dict:
         ).fetchone()[0],
     }
     return metrics
+
+
+def source_deal_queue(conn: sqlite3.Connection, limit: int = 10) -> list[sqlite3.Row]:
+    return conn.execute(
+        """
+        WITH latest_success AS (
+            SELECT MAX(id) AS run_id
+            FROM collection_runs
+            WHERE status = 'success'
+        )
+        SELECT
+            dp.id,
+            dp.product_id,
+            dp.title,
+            dp.url,
+            dp.extracted_price_krw,
+            dp.matched_keywords,
+            dp.match_score,
+            dp.match_status,
+            dp.collected_at,
+            s.display_name AS source,
+            cp.brand,
+            cp.name AS product,
+            cp.category,
+            de.current_min_price_krw,
+            de.market_median_price_krw,
+            de.historical_median_30d_krw,
+            de.discount_vs_market_pct,
+            de.discount_vs_30d_pct,
+            de.deal_score,
+            de.confidence
+        FROM deal_posts dp
+        JOIN sources s ON s.id = dp.source_id
+        LEFT JOIN canonical_products cp ON cp.id = dp.product_id
+        LEFT JOIN latest_success ls ON 1 = 1
+        LEFT JOIN deal_evaluations de
+          ON de.product_id = dp.product_id
+         AND de.run_id = ls.run_id
+        WHERE dp.match_status = 'candidate'
+        ORDER BY
+            CASE WHEN dp.extracted_price_krw IS NOT NULL THEN 0 ELSE 1 END,
+            dp.match_score DESC,
+            dp.collected_at DESC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
 
 
 def latest_deal_cards(conn: sqlite3.Connection, limit: int = 30) -> list[sqlite3.Row]:
@@ -198,6 +251,43 @@ def deal_review_flags(row: Mapping[str, object]) -> list[str]:
     return flags
 
 
+def source_deal_reference_price(row: Mapping[str, object]) -> int | None:
+    for key in ("historical_median_30d_krw", "market_median_price_krw", "current_min_price_krw"):
+        value = row[key]
+        if value is not None:
+            return int(value)
+    return None
+
+
+def source_deal_discount_pct(row: Mapping[str, object]) -> float | None:
+    price = row["extracted_price_krw"]
+    reference = source_deal_reference_price(row)
+    if price is None or reference is None or reference <= 0:
+        return None
+    return round((reference - int(price)) / reference * 100, 1)
+
+
+def source_deal_flags(row: Mapping[str, object]) -> list[str]:
+    flags: list[str] = []
+    price = row["extracted_price_krw"]
+    reference = source_deal_reference_price(row)
+    discount = source_deal_discount_pct(row)
+    if row["product_id"] is None:
+        flags.append("상품 매칭 없음")
+    if int(row["match_score"] or 0) < 30:
+        flags.append("소스 매칭 약함")
+    if price is None:
+        flags.append("글 제목에서 가격 추출 안 됨")
+    if reference is None:
+        flags.append("비교 기준가 없음")
+    elif discount is not None:
+        if discount < 10:
+            flags.append("기준가 대비 할인 약함")
+        if discount > 70:
+            flags.append("할인율 과도함")
+    return flags
+
+
 def is_safe_auto_publish_candidate(row: Mapping[str, object]) -> bool:
     return row["publication_status"] == "auto_approved" and not deal_review_flags(row)
 
@@ -320,3 +410,35 @@ def decide_deal(conn: sqlite3.Connection, evaluation_id: int, decision: str, rea
                         row["deal_score"],
                     ),
                 )
+
+
+def decide_source_deal(
+    conn: sqlite3.Connection,
+    deal_post_id: int,
+    decision: str,
+    reason: str | None = None,
+) -> None:
+    status_by_decision = {
+        "approve_source_deal": "approved",
+        "reject_source_deal": "rejected",
+        "exclude_source_deal": "excluded",
+    }
+    if decision not in status_by_decision:
+        raise ValueError(f"Unsupported source deal decision: {decision}")
+    status = status_by_decision[decision]
+    with conn:
+        conn.execute(
+            """
+            UPDATE deal_posts
+            SET match_status = ?
+            WHERE id = ?
+            """,
+            (status, deal_post_id),
+        )
+        conn.execute(
+            """
+            INSERT INTO source_deal_reviews (deal_post_id, decision, reason, decided_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (deal_post_id, decision, reason, utc_now()),
+        )

@@ -14,9 +14,14 @@ from .admin import (
     deal_review_flags,
     decide_deal,
     decide_offer,
+    decide_source_deal,
     is_safe_auto_publish_candidate,
     latest_deal_cards,
     review_queue,
+    source_deal_discount_pct,
+    source_deal_flags,
+    source_deal_queue,
+    source_deal_reference_price,
 )
 from .db import apply_migrations, connect
 from .paths import DB_PATH
@@ -25,6 +30,7 @@ from .repository import upsert_default_sources
 
 
 APP_STATE = {"collecting": False, "last_message": ""}
+DAILY_SOURCE_DEAL_LIMIT = 10
 DAILY_DEAL_REVIEW_LIMIT = 10
 DAILY_MATCH_REVIEW_LIMIT = 10
 
@@ -61,6 +67,12 @@ OFFER_DECISION_LABELS = {
     "approve_match": "같은 상품 확인",
     "reject_match": "다른 상품 처리",
     "exclude": "기준가 제외",
+}
+
+SOURCE_DEAL_DECISION_LABELS = {
+    "approve_source_deal": "특가 승인",
+    "reject_source_deal": "특가 아님",
+    "exclude_source_deal": "소스 제외",
 }
 
 
@@ -100,6 +112,21 @@ def deal_evidence(row) -> tuple[str, str]:
             f"시장 중앙 {money(row['market_median_price_krw'])} · 30일 데이터 누적 전 임시 기준",
         )
     return ("판정 근거 부족", "가격 표본이 더 필요합니다.")
+
+
+def source_deal_evidence(row) -> tuple[str, str]:
+    reference = source_deal_reference_price(row)
+    discount = source_deal_discount_pct(row)
+    if row["extracted_price_krw"] is None:
+        return ("가격 추출 필요", "글 제목만으로 가격을 읽지 못했습니다.")
+    if reference is None or discount is None:
+        return ("기준가 수집 필요", "아직 이 상품의 비교 기준가가 충분하지 않습니다.")
+    basis = "30일 중앙가" if row["historical_median_30d_krw"] is not None else "오늘 수집 중앙가"
+    gap = reference - int(row["extracted_price_krw"])
+    return (
+        f"{basis} 대비 {money(gap)} 저렴 · {pct(discount)}",
+        f"{basis} {money(reference)} · 특가 글 가격 {money(row['extracted_price_krw'])}",
+    )
 
 
 def offer_package_note(row) -> str:
@@ -228,7 +255,7 @@ def layout(content: str, message: str = "", auto_refresh: bool = False) -> bytes
     <h1>Beauty Deal Radar Admin</h1>
     <div class="actions">
       <form method="post" action="/auto-publish-safe">
-        <button type="submit" title="가격 표본, 매칭 점수, 할인율이 안전 범위인 자동 후보만 공개합니다.">안전 후보 일괄 공개</button>
+        <button type="submit" title="가격비교 데이터에서 표본, 매칭 점수, 할인율이 안전 범위인 보조 후보만 공개합니다.">안전 기준가 후보 공개</button>
       </form>
       <form method="post" action="/collect">
         <button class="primary" type="submit">오늘 데이터 수집</button>
@@ -249,6 +276,7 @@ def render_dashboard(db_path: Path, message: str = "") -> bytes:
         apply_migrations(conn)
         upsert_default_sources(conn)
         metrics = dashboard_metrics(conn)
+        source_deals = source_deal_queue(conn, limit=DAILY_SOURCE_DEAL_LIMIT)
         deal_backlog = [
             row
             for row in latest_deal_cards(conn, limit=200)
@@ -262,15 +290,64 @@ def render_dashboard(db_path: Path, message: str = "") -> bytes:
     metric_html = f"""
     <section class="grid">
       <div class="metric"><div class="label">상품</div><div class="value">{metrics['products']}</div></div>
-      <div class="metric"><div class="label">오퍼</div><div class="value">{metrics['offers']}</div></div>
+      <div class="metric"><div class="label">특가 소스</div><div class="value">{len(source_deals)}/{metrics['source_deal_queue']}</div></div>
       <div class="metric"><div class="label">가격 스냅샷</div><div class="value">{metrics['price_snapshots']}</div></div>
-      <div class="metric"><div class="label">오늘 가격 검증</div><div class="value">{len(deals)}/{metrics['deal_review_queue']}</div></div>
-      <div class="metric"><div class="label">오늘 상품 매칭</div><div class="value">{len(queue)}/{metrics['review_queue']}</div></div>
-      <div class="metric"><div class="label">안전 후보</div><div class="value">{safe_auto_count}</div></div>
+      <div class="metric"><div class="label">기준가 검증</div><div class="value">{len(deals)}/{metrics['deal_review_queue']}</div></div>
+      <div class="metric"><div class="label">상품 매칭</div><div class="value">{len(queue)}/{metrics['review_queue']}</div></div>
+      <div class="metric"><div class="label">승인 특가</div><div class="value">{metrics['approved_source_deals']}</div></div>
     </section>
     <section class="panel">
       <h2>최근 실행</h2>
       <div class="sub">상태: {esc(latest_run.get('status', '-'))} · 시작: {esc(latest_run.get('started_at', '-'))} · 종료: {esc(latest_run.get('finished_at', '-'))} · 오퍼: {esc(latest_run.get('offer_count', '-'))}</div>
+    </section>
+    """
+
+    source_rows = []
+    for row in source_deals:
+        product_label = f"{row['brand'] or ''} {row['product'] or ''}".strip() or "상품 매칭 필요"
+        query = product_label if row["product_id"] else row["title"]
+        evidence, evidence_detail = source_deal_evidence(row)
+        flags = source_deal_flags(row)
+        flag_html = (
+            '<span class="risk">확인 필요: ' + esc(", ".join(flags[:3])) + "</span>"
+            if flags
+            else '<span class="safe">소스/가격 기준 양호</span>'
+        )
+        source_rows.append(
+            f"""
+            <tr>
+              <td>
+                <div class="title">{esc(row['title'])}</div>
+                <div class="sub">{esc(row['source'])} · {esc(row['collected_at'])}</div>
+                <div class="sub">{search_links(query)}</div>
+              </td>
+              <td>
+                <div class="title">{esc(product_label)}</div>
+                <div class="sub">{esc(row['category'] or '')}</div>
+                <div class="sub">키워드 {esc(row['matched_keywords'] or '-')} · 점수 {esc(row['match_score'])}</div>
+              </td>
+              <td>{money(row['extracted_price_krw'])}</td>
+              <td><div class="explain">{esc(evidence)}</div><div class="sub">{esc(evidence_detail)}</div><div class="sub">{flag_html}</div></td>
+              <td><span class="badge {esc(row['match_status'])}">{esc(match_label(row['match_status']))}</span></td>
+              <td>
+                <div class="actions">
+                  <a class="button" href="{esc(row['url'])}" target="_blank" rel="noreferrer">원문 확인</a>
+                  <form method="post" action="/source-deal-decision"><input type="hidden" name="id" value="{row['id']}"><input type="hidden" name="decision" value="approve_source_deal"><button type="submit" title="사용자 화면의 특가 피드에 이 외부 특가 글을 공개합니다.">특가 승인</button></form>
+                  <form method="post" action="/source-deal-decision"><input type="hidden" name="id" value="{row['id']}"><input type="hidden" name="decision" value="reject_source_deal"><button class="danger" type="submit" title="가격이 애매하거나 특가로 보기 어려우면 오늘 후보에서 제외합니다.">특가 아님</button></form>
+                  <form method="post" action="/source-deal-decision"><input type="hidden" name="id" value="{row['id']}"><input type="hidden" name="decision" value="exclude_source_deal"><button class="danger" type="submit" title="광고, 다른 제품, 낚시성 글처럼 앞으로 기준으로 삼기 어려운 소스를 제외합니다.">소스 제외</button></form>
+                </div>
+              </td>
+            </tr>
+            """
+        )
+    source_html = f"""
+    <section class="panel">
+      <h2>오늘 특가 소스 검수 10개</h2>
+      <div class="sub">커뮤니티/핫딜/몰 세일 글이 사용자 화면의 메인 후보입니다. 다나와 같은 가격비교 데이터는 여기서 기준가와 오류 신호를 붙이는 보조 근거로만 사용합니다.</div>
+      <table>
+        <thead><tr><th>특가 글</th><th>연결 상품</th><th>글 가격</th><th>기준가 근거</th><th>상태</th><th>검수</th></tr></thead>
+        <tbody>{''.join(source_rows) or '<tr><td colspan="6">오늘 검수할 특가 소스가 없습니다. 수집 후 표시됩니다.</td></tr>'}</tbody>
+      </table>
     </section>
     """
 
@@ -311,8 +388,8 @@ def render_dashboard(db_path: Path, message: str = "") -> bytes:
         )
     deal_html = f"""
     <section class="panel">
-      <h2>오늘 가격 검증 10개</h2>
-      <div class="sub">전체 후보를 다 보지 않고, 오늘은 상위 {DAILY_DEAL_REVIEW_LIMIT}개만 봅니다. 안전 후보는 상단 버튼으로 일괄 공개하고, 이상 징후가 있는 후보만 직접 확인하세요.</div>
+      <h2>기준가 이상치 검수 10개</h2>
+      <div class="sub">가격비교에서 만든 후보는 공개용 메인이 아니라 기준가 이상치와 매칭 오류를 찾는 보조 큐입니다. 여기서 이상한 가격을 제외해야 위 특가 소스의 비교 근거가 깨끗해집니다.</div>
       <table>
         <thead><tr><th>상품</th><th>현재가</th><th>왜 후보인가</th><th>점수/근거</th><th>공개 상태</th><th>검수</th></tr></thead>
         <tbody>{''.join(deal_rows) or '<tr><td colspan="6">아직 평가 데이터가 없습니다.</td></tr>'}</tbody>
@@ -361,7 +438,7 @@ def render_dashboard(db_path: Path, message: str = "") -> bytes:
         display_message = "수집 중입니다. 완료될 때까지 5초마다 자동 새로고침합니다."
     elif display_message == "이미 수집이 실행 중입니다.":
         display_message = ""
-    return layout(metric_html + deal_html + queue_html, message=display_message, auto_refresh=auto_refresh)
+    return layout(metric_html + source_html + deal_html + queue_html, message=display_message, auto_refresh=auto_refresh)
 
 
 class AdminHandler(BaseHTTPRequestHandler):
@@ -387,6 +464,8 @@ class AdminHandler(BaseHTTPRequestHandler):
                 self._handle_offer_decision(form)
             elif parsed.path == "/deal-decision":
                 self._handle_deal_decision(form)
+            elif parsed.path == "/source-deal-decision":
+                self._handle_source_deal_decision(form)
             else:
                 self.send_error(404)
                 return
@@ -443,6 +522,17 @@ class AdminHandler(BaseHTTPRequestHandler):
             else:
                 decide_deal(conn, evaluation_id, decision)
         APP_STATE["last_message"] = f"딜 #{evaluation_id} 처리 완료: {DEAL_DECISION_LABELS.get(decision, decision)}"
+
+    def _handle_source_deal_decision(self, form: dict[str, list[str]]) -> None:
+        deal_post_id = int(form.get("id", ["0"])[0])
+        decision = form.get("decision", [""])[0]
+        with connect(self.db_path) as conn:
+            apply_migrations(conn)
+            decide_source_deal(conn, deal_post_id, decision)
+        APP_STATE["last_message"] = (
+            f"특가 소스 #{deal_post_id} 처리 완료: "
+            f"{SOURCE_DEAL_DECISION_LABELS.get(decision, decision)}"
+        )
 
     def _send_html(self, body: bytes) -> None:
         self.send_response(200)

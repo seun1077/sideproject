@@ -4,7 +4,7 @@ import sqlite3
 import unittest
 
 from beauty_deal_radar.db import apply_migrations
-from beauty_deal_radar.public_api import list_deals, price_history, service_summary
+from beauty_deal_radar.public_api import list_deals, list_source_deals, price_history, service_summary
 from beauty_deal_radar.repository import upsert_default_sources
 
 
@@ -134,6 +134,67 @@ class PublicApiTest(unittest.TestCase):
         self.assertEqual(deals[0]["other_options"][0]["unit_price_krw"], 13000)
         self.assertEqual(len(history), 1)
         self.assertEqual(history[0]["median_price_krw"], 13000)
+
+    def test_source_deals_use_approved_hotdeal_posts_as_public_feed(self) -> None:
+        with make_conn() as conn:
+            source_id = conn.execute("SELECT id FROM sources WHERE code = 'algumon'").fetchone()["id"]
+            product_id = conn.execute(
+                """
+                INSERT INTO canonical_products (
+                    canonical_key, brand, name, category, target_volume_value,
+                    target_volume_unit, canonical_query
+                )
+                VALUES ('test-toner', '테스트', '토너', '스킨케어', 200, 'ml', '테스트 토너')
+                RETURNING id
+                """
+            ).fetchone()["id"]
+            run_id = conn.execute(
+                """
+                INSERT INTO collection_runs (
+                    started_at, finished_at, collector_version, status, seed_count,
+                    offer_count, deal_post_count
+                )
+                VALUES ('2026-06-15T00:00:00Z', '2026-06-15T00:01:00Z',
+                        'test', 'success', 1, 0, 1)
+                RETURNING id
+                """
+            ).fetchone()["id"]
+            conn.execute(
+                """
+                INSERT INTO deal_evaluations (
+                    run_id, product_id, evaluated_at, current_min_price_krw,
+                    market_median_price_krw, historical_median_30d_krw,
+                    discount_vs_market_pct, deal_score, confidence,
+                    reason, publication_status
+                )
+                VALUES (?, ?, '2026-06-15T00:01:00Z', 12000, 18000, 20000,
+                        33.3, 92, 'medium', 'test', 'draft')
+                """,
+                (run_id, product_id),
+            )
+            conn.execute(
+                """
+                INSERT INTO deal_posts (
+                    source_id, source_post_key, product_id, title, url, collected_at,
+                    extracted_price_krw, matched_keywords, match_score, match_status
+                )
+                VALUES (?, 'post-1', ?, '테스트 토너 오늘 특가 10000원',
+                        'https://example.com/hotdeal', '2026-06-15T00:02:00Z',
+                        10000, '테스트,토너', 80, 'approved')
+                """,
+                (source_id, product_id),
+            )
+
+            deals = list_source_deals(conn, visibility="public")
+            hidden = list_deals(conn, visibility="public")
+
+        self.assertEqual(len(deals), 1)
+        self.assertEqual(deals[0]["title"], "테스트 토너 오늘 특가 10000원")
+        self.assertEqual(deals[0]["current_price_krw"], 10000)
+        self.assertEqual(deals[0]["reference_price_krw"], 20000)
+        self.assertEqual(deals[0]["price_gap_krw"], 10000)
+        self.assertEqual(deals[0]["discount_pct"], 50.0)
+        self.assertEqual(hidden, [])
 
 
 if __name__ == "__main__":
