@@ -58,6 +58,16 @@ def seed_deal(conn: sqlite3.Connection, *, prices: list[int], discount_pct: floa
             """,
             (source_id, f"offer-{index}", product_id, price, price),
         ).fetchone()["id"]
+        conn.execute(
+            """
+            INSERT INTO price_snapshots (
+                run_id, offer_id, product_id, collected_at, package_price_krw,
+                normalized_price_krw
+            )
+            VALUES (?, ?, ?, '2026-06-15T00:00:00Z', ?, ?)
+            """,
+            (run_id, offer_id, product_id, price, price),
+        )
         offer_ids.append(offer_id)
     best_price = min(prices)
     evaluation_id = conn.execute(

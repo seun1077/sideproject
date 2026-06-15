@@ -108,15 +108,22 @@ def evaluate_current_deals(conn: sqlite3.Connection, run_id: int) -> list[dict]:
         for product in products:
             offers = conn.execute(
                 """
-                SELECT id, title, url, package_price_krw, normalized_price_krw
-                FROM offers
-                WHERE product_id = ?
-                  AND baseline_eligible = 1
-                  AND normalized_price_krw IS NOT NULL
-                  AND match_status IN ('candidate', 'approved')
-                ORDER BY normalized_price_krw ASC
+                SELECT
+                    o.id,
+                    o.title,
+                    o.url,
+                    ps.package_price_krw,
+                    ps.normalized_price_krw
+                FROM price_snapshots ps
+                JOIN offers o ON o.id = ps.offer_id
+                WHERE ps.run_id = ?
+                  AND ps.product_id = ?
+                  AND ps.normalized_price_krw IS NOT NULL
+                  AND o.baseline_eligible = 1
+                  AND o.match_status IN ('candidate', 'approved')
+                ORDER BY ps.normalized_price_krw ASC
                 """,
-                (product["id"],),
+                (run_id, product["id"]),
             ).fetchall()
             if not offers:
                 continue

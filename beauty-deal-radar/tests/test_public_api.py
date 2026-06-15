@@ -98,7 +98,7 @@ class PublicApiTest(unittest.TestCase):
                 """,
                 (run_id, product_id, offer_id),
             )
-            conn.execute(
+            bundle_offer_id = conn.execute(
                 """
                 INSERT INTO offers (
                     source_id, source_offer_key, product_id, title, url,
@@ -109,8 +109,19 @@ class PublicApiTest(unittest.TestCase):
                 VALUES (?, 'offer-2', ?, '라운드랩 자작나무 수분 선크림 50ml 1+1+1',
                         'https://example.com/bundle', 39000, 13000, 3, 95,
                         'approved', 1, '2026-06-15T00:00:00Z', '2026-06-15T00:00:00Z')
+                RETURNING id
                 """,
                 (source_id, product_id),
+            ).fetchone()["id"]
+            conn.execute(
+                """
+                INSERT INTO price_snapshots (
+                    run_id, offer_id, product_id, collected_at, package_price_krw,
+                    normalized_price_krw
+                )
+                VALUES (?, ?, ?, '2026-06-15T00:00:00Z', 39000, 13000)
+                """,
+                (run_id, bundle_offer_id, product_id),
             )
 
             deals = list_deals(conn, visibility="public")

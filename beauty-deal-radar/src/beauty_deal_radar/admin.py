@@ -97,36 +97,44 @@ def latest_deal_cards(conn: sqlite3.Connection, limit: int = 30) -> list[sqlite3
             o.baseline_eligible AS best_baseline_eligible,
             (
                 SELECT COUNT(*)
-                FROM offers ox
-                WHERE ox.product_id = de.product_id
+                FROM price_snapshots psx
+                JOIN offers ox ON ox.id = psx.offer_id
+                WHERE psx.run_id = de.run_id
+                  AND psx.product_id = de.product_id
                   AND ox.baseline_eligible = 1
-                  AND ox.normalized_price_krw IS NOT NULL
+                  AND psx.normalized_price_krw IS NOT NULL
                   AND ox.match_status IN ('candidate', 'approved')
             ) AS offer_count,
             (
                 SELECT COUNT(*)
-                FROM offers ox
-                WHERE ox.product_id = de.product_id
+                FROM price_snapshots psx
+                JOIN offers ox ON ox.id = psx.offer_id
+                WHERE psx.run_id = de.run_id
+                  AND psx.product_id = de.product_id
                   AND ox.baseline_eligible = 1
-                  AND ox.normalized_price_krw IS NOT NULL
+                  AND psx.normalized_price_krw IS NOT NULL
                   AND ox.match_status = 'approved'
             ) AS approved_offer_count,
             (
                 SELECT COUNT(*)
-                FROM offers ox
-                WHERE ox.product_id = de.product_id
+                FROM price_snapshots psx
+                JOIN offers ox ON ox.id = psx.offer_id
+                WHERE psx.run_id = de.run_id
+                  AND psx.product_id = de.product_id
                   AND ox.baseline_eligible = 1
-                  AND ox.normalized_price_krw IS NOT NULL
+                  AND psx.normalized_price_krw IS NOT NULL
                   AND ox.match_status IN ('candidate', 'approved')
-                  AND ox.normalized_price_krw <= de.current_min_price_krw * 1.15
+                  AND psx.normalized_price_krw <= de.current_min_price_krw * 1.15
             ) AS near_price_count,
             (
-                SELECT MIN(ox.normalized_price_krw)
-                FROM offers ox
-                WHERE ox.product_id = de.product_id
+                SELECT MIN(psx.normalized_price_krw)
+                FROM price_snapshots psx
+                JOIN offers ox ON ox.id = psx.offer_id
+                WHERE psx.run_id = de.run_id
+                  AND psx.product_id = de.product_id
                   AND ox.id != de.best_offer_id
                   AND ox.baseline_eligible = 1
-                  AND ox.normalized_price_krw IS NOT NULL
+                  AND psx.normalized_price_krw IS NOT NULL
                   AND ox.match_status IN ('candidate', 'approved')
             ) AS second_price_krw
         FROM deal_evaluations de

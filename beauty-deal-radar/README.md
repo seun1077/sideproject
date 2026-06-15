@@ -135,6 +135,7 @@ The public MVP reads from the same SQLite database as the admin page. It exposes
 The public page only shows manually approved deals. Automatic candidates and unreviewed matches stay in the admin page until the best offer is confirmed and the deal is approved. If no deal has been approved yet, the page returns an empty state instead of mock data.
 
 Deal cards show the candidate unit price, the current collected market reference price, the won/pct gap, and other collected bundle/options for the same canonical product. Internal labels such as confidence and publication status are intentionally not shown on the public screen.
+Current deal evaluation only uses `price_snapshots` collected in the same collection run. If a run collects zero fresh marketplace offers, the admin page shows no current price candidates instead of reusing stale offer prices.
 
 ## Backend Structure
 

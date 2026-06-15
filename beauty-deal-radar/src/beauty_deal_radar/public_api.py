@@ -28,12 +28,13 @@ def _price_gap(current_price: int | None, reference_price: int | None) -> int | 
 def _offer_options(
     conn: sqlite3.Connection,
     product_id: int,
+    run_id: int,
     *,
     exclude_offer_id: int | None = None,
     limit: int = 4,
     approved_only: bool = False,
 ) -> list[dict]:
-    params: list[object] = [product_id]
+    params: list[object] = [run_id, product_id]
     exclude_sql = ""
     if exclude_offer_id is not None:
         exclude_sql = "AND o.id != ?"
@@ -46,18 +47,20 @@ def _offer_options(
             o.id,
             o.title,
             o.url,
-            o.package_price_krw,
-            o.normalized_price_krw,
+            ps.package_price_krw,
+            ps.normalized_price_krw,
             o.pack_count,
             s.display_name AS source
-        FROM offers o
+        FROM price_snapshots ps
+        JOIN offers o ON o.id = ps.offer_id
         JOIN sources s ON s.id = o.source_id
-        WHERE o.product_id = ?
+        WHERE ps.run_id = ?
+          AND ps.product_id = ?
           {exclude_sql}
           AND o.baseline_eligible = 1
-          AND o.normalized_price_krw IS NOT NULL
+          AND ps.normalized_price_krw IS NOT NULL
           {status_sql}
-        ORDER BY o.normalized_price_krw ASC, o.package_price_krw ASC
+        ORDER BY ps.normalized_price_krw ASC, ps.package_price_krw ASC
         LIMIT ?
         """,
         params,
@@ -144,6 +147,7 @@ def list_deals(
         f"""
         SELECT
             de.id AS evaluation_id,
+            de.run_id,
             de.evaluated_at,
             de.publication_status,
             de.current_min_price_krw,
@@ -198,6 +202,7 @@ def list_deals(
         options = _offer_options(
             conn,
             int(row["product_id"]),
+            int(row["run_id"]),
             exclude_offer_id=_optional_int(row["offer_id"]),
             approved_only=visibility == "public",
         )
