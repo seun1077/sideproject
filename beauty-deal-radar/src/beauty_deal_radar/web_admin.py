@@ -42,6 +42,7 @@ CONFIDENCE_LABELS = {
 DEAL_DECISION_LABELS = {
     "approve_deal": "공개 승인",
     "reject_deal": "노출 제외",
+    "exclude_best_offer": "가격 불일치 제외",
     "hold": "보류",
 }
 
@@ -254,6 +255,7 @@ def render_dashboard(db_path: Path, message: str = "") -> bytes:
                 <div class="actions">
                   <a class="button" href="{esc(row['best_url'])}" target="_blank" rel="noreferrer">판매처 확인</a>
                   <form method="post" action="/deal-decision"><input type="hidden" name="id" value="{row['evaluation_id']}"><input type="hidden" name="decision" value="approve_deal"><button type="submit" title="사용자용 화면에 공개할 만한 특가로 승인합니다.">공개 승인</button></form>
+                  <form method="post" action="/deal-decision"><input type="hidden" name="id" value="{row['evaluation_id']}"><input type="hidden" name="decision" value="exclude_best_offer"><button class="danger" type="submit" title="판매처에 들어갔을 때 실제 가격이 다르면 이 오퍼를 가격 기준에서 제외합니다.">가격 불일치 제외</button></form>
                   <form method="post" action="/deal-decision"><input type="hidden" name="id" value="{row['evaluation_id']}"><input type="hidden" name="decision" value="reject_deal"><button class="danger" type="submit" title="가격 근거가 약하거나 상품이 애매해서 사용자용 화면에서 제외합니다.">노출 제외</button></form>
                 </div>
               </td>
@@ -358,7 +360,24 @@ class AdminHandler(BaseHTTPRequestHandler):
         decision = form.get("decision", [""])[0]
         with connect(self.db_path) as conn:
             apply_migrations(conn)
-            decide_deal(conn, evaluation_id, decision)
+            if decision == "exclude_best_offer":
+                row = conn.execute(
+                    "SELECT best_offer_id FROM deal_evaluations WHERE id = ?",
+                    (evaluation_id,),
+                ).fetchone()
+                if row and row["best_offer_id"]:
+                    decide_offer(conn, int(row["best_offer_id"]), "exclude", reason="landing_price_mismatch")
+                decide_deal(conn, evaluation_id, "reject_deal", reason="landing_price_mismatch")
+            elif decision == "approve_deal":
+                row = conn.execute(
+                    "SELECT best_offer_id FROM deal_evaluations WHERE id = ?",
+                    (evaluation_id,),
+                ).fetchone()
+                if row and row["best_offer_id"]:
+                    decide_offer(conn, int(row["best_offer_id"]), "approve_match", reason="deal_publication_approved")
+                decide_deal(conn, evaluation_id, decision)
+            else:
+                decide_deal(conn, evaluation_id, decision)
         APP_STATE["last_message"] = f"딜 #{evaluation_id} 처리 완료: {DEAL_DECISION_LABELS.get(decision, decision)}"
 
     def _send_html(self, body: bytes) -> None:

@@ -54,6 +54,18 @@ class MatchingTest(unittest.TestCase):
         self.assertEqual(result.status, "candidate")
         self.assertTrue(result.baseline_eligible)
 
+    def test_rejects_product_line_variant(self) -> None:
+        seed = ProductSeed(
+            brand="조선미녀",
+            product="맑은쌀 선크림",
+            query="조선미녀 맑은쌀 선크림",
+            category="선케어",
+            volume_hint="50ml",
+        )
+        result = score_offer_match(seed, "조선 미녀 맑은 쌀 선크림 아쿠아프레쉬 50ml")
+        self.assertEqual(result.status, "excluded")
+        self.assertIn("variant", result.exclusion_reason)
+
 
 if __name__ == "__main__":
     unittest.main()

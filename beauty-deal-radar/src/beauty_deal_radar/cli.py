@@ -7,7 +7,7 @@ from pathlib import Path
 from .admin import review_queue
 from .db import init_db, connect
 from .evaluation import latest_deal_report
-from .maintenance import recalculate_normalized_prices
+from .maintenance import recalculate_candidate_matches, recalculate_normalized_prices
 from .paths import DB_PATH
 from .pipeline import run_collection
 from .public_server import run_public_server
@@ -92,6 +92,12 @@ def cmd_recalculate_prices(args: argparse.Namespace) -> None:
     print(json.dumps(results, ensure_ascii=False, indent=2))
 
 
+def cmd_recalculate_matches(args: argparse.Namespace) -> None:
+    with connect(_db_path(args.db)) as conn:
+        results = recalculate_candidate_matches(conn)
+    print(json.dumps(results, ensure_ascii=False, indent=2))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="beauty-deal-radar")
     parser.add_argument("--db", help="SQLite DB path. Defaults to data/beauty_deals.sqlite3")
@@ -136,6 +142,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Recompute pack counts and per-unit prices for existing offers",
     )
     recalc_parser.set_defaults(func=cmd_recalculate_prices)
+
+    recalc_match_parser = sub.add_parser(
+        "recalculate-matches",
+        help="Recompute automatic matching for non-approved offers",
+    )
+    recalc_match_parser.set_defaults(func=cmd_recalculate_matches)
     return parser
 
 

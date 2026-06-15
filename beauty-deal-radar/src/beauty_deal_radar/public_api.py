@@ -31,12 +31,14 @@ def _offer_options(
     *,
     exclude_offer_id: int | None = None,
     limit: int = 4,
+    approved_only: bool = False,
 ) -> list[dict]:
     params: list[object] = [product_id]
     exclude_sql = ""
     if exclude_offer_id is not None:
         exclude_sql = "AND o.id != ?"
         params.append(exclude_offer_id)
+    status_sql = "AND o.match_status = 'approved'" if approved_only else "AND o.match_status IN ('candidate', 'approved')"
     params.append(limit)
     rows = conn.execute(
         f"""
@@ -54,7 +56,7 @@ def _offer_options(
           {exclude_sql}
           AND o.baseline_eligible = 1
           AND o.normalized_price_krw IS NOT NULL
-          AND o.match_status IN ('candidate', 'approved')
+          {status_sql}
         ORDER BY o.normalized_price_krw ASC, o.package_price_krw ASC
         LIMIT ?
         """,
@@ -131,7 +133,9 @@ def list_deals(
         )
         params.append(min_discount)
     if visibility == "public":
-        where.append("(pd.status = 'published' OR de.publication_status IN ('approved', 'auto_approved'))")
+        where.append("(pd.status = 'published' OR de.publication_status = 'approved')")
+        where.append("o.match_status = 'approved'")
+        where.append("o.baseline_eligible = 1")
     elif visibility == "review":
         where.append("de.publication_status IN ('needs_review', 'draft')")
 
@@ -195,6 +199,7 @@ def list_deals(
             conn,
             int(row["product_id"]),
             exclude_offer_id=_optional_int(row["offer_id"]),
+            approved_only=visibility == "public",
         )
         cheaper_options = [
             option

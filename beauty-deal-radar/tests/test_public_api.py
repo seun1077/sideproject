@@ -94,7 +94,7 @@ class PublicApiTest(unittest.TestCase):
                     reason, publication_status
                 )
                 VALUES (?, ?, ?, '2026-06-15T00:01:00Z', 12000, 15000,
-                        20.0, 86, 'medium', 'test', 'auto_approved')
+                        20.0, 86, 'medium', 'test', 'approved')
                 """,
                 (run_id, product_id, offer_id),
             )

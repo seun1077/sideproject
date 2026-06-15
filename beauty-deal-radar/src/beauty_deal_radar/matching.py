@@ -18,6 +18,18 @@ CATEGORY_TERMS = {
     "선케어": ["선크림", "선에센스", "선플러스", "안뗄리오스"],
 }
 
+VARIANT_TERMS = [
+    "아쿠아프레쉬",
+    "아쿠아 프레쉬",
+    "톤업",
+    "선스틱",
+    "스틱",
+    "쿠션",
+    "스프레이",
+    "미스트",
+    "마스크팩",
+]
+
 
 def score_offer_match(seed: ProductSeed, title: str) -> MatchResult:
     title_clean = clean(title)
@@ -53,6 +65,15 @@ def score_offer_match(seed: ProductSeed, title: str) -> MatchResult:
             excludes.append("mask_or_pack_variant")
     if "선스틱" in title_clean and "선스틱" not in seed.product:
         excludes.append("sunstick_variant")
+    for term in VARIANT_TERMS:
+        term_compact = compact(term)
+        if (
+            term_compact in title_compact
+            and term_compact not in compact(seed.product)
+            and term_compact not in compact(seed.query)
+        ):
+            excludes.append(f"variant:{compact(term)}")
+            break
 
     required = CATEGORY_TERMS.get(seed.category, [])
     if required and not any(compact(term) in title_compact for term in required):
@@ -63,4 +84,3 @@ def score_offer_match(seed: ProductSeed, title: str) -> MatchResult:
     if score >= 50:
         return MatchResult(score=score, status="candidate", exclusion_reason="", baseline_eligible=True)
     return MatchResult(score=score, status="rejected", exclusion_reason=",".join(reasons), baseline_eligible=False)
-

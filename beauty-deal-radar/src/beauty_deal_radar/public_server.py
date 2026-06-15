@@ -364,7 +364,7 @@ INDEX_HTML = """<!doctype html>
     async function load() {
       const [summary, deals, products, categories] = await Promise.all([
         getJson("/api/summary"),
-        getJson("/api/deals?visibility=all&limit=60"),
+        getJson("/api/deals?visibility=public&limit=60"),
         getJson("/api/products?limit=200"),
         getJson("/api/categories"),
       ]);
@@ -431,7 +431,7 @@ INDEX_HTML = """<!doctype html>
       const grid = document.getElementById("dealGrid");
       const deals = filteredDeals();
       if (!deals.length) {
-        grid.innerHTML = `<div class="empty" style="grid-column: 1 / -1"><strong>표시할 딜 후보가 없습니다.</strong><span>관리자 페이지에서 수집을 실행하면 이 영역에 실제 후보가 채워집니다.</span></div>`;
+        grid.innerHTML = `<div class="empty" style="grid-column: 1 / -1"><strong>공개된 특가가 없습니다.</strong><span>관리자 페이지에서 판매처 가격과 상품 매칭을 확인한 뒤 공개 승인하면 이 영역에 표시됩니다.</span></div>`;
         return;
       }
       grid.innerHTML = deals.map((deal) => `

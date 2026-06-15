@@ -29,6 +29,7 @@ C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\p
 C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py report
 C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py review-queue
 C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py cleanup
+C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py recalculate-matches
 C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py recalculate-prices
 C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py admin-server
 C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py public-server
@@ -104,6 +105,7 @@ The admin page can:
 - show deal evaluations and publication status
 - open source/search links for manual verification
 - approve or reject deal publication
+- exclude a best offer when the comparison site price does not match the seller landing page
 - approve, reject, or exclude offer-product matches
 
 ## Public MVP
@@ -128,7 +130,7 @@ The public MVP reads from the same SQLite database as the admin page. It exposes
 - `GET /api/products`
 - `GET /api/products/{id}/price-history?days=90`
 
-If no successful collection has run yet, the page returns an empty state instead of mock data.
+The public page only shows manually approved deals. Automatic candidates and unreviewed matches stay in the admin page until the best offer is confirmed and the deal is approved. If no deal has been approved yet, the page returns an empty state instead of mock data.
 
 Deal cards show the candidate unit price, the current collected market reference price, the won/pct gap, and other collected bundle/options for the same canonical product. Internal labels such as confidence and publication status are intentionally not shown on the public screen.
 
@@ -155,7 +157,7 @@ This is not a true historical discount. It is a bootstrap proxy until the servic
 The collector also records:
 
 - `match_score`
-- `excluded_reason`
+- `exclusion_reason`
 - `usable_for_baseline`
 - `pack_count`
 - `normalized_price_krw`
