@@ -17,6 +17,40 @@ from .repository import upsert_default_sources
 
 APP_STATE = {"collecting": False, "last_message": ""}
 
+PUBLICATION_LABELS = {
+    "auto_approved": "자동 후보",
+    "needs_review": "확인 필요",
+    "approved": "공개 승인됨",
+    "rejected": "노출 제외됨",
+    "draft": "보류",
+    "expired": "만료",
+}
+
+MATCH_LABELS = {
+    "candidate": "같은 상품 후보",
+    "approved": "같은 상품 확인",
+    "rejected": "다른 상품",
+    "excluded": "기준가 제외",
+}
+
+CONFIDENCE_LABELS = {
+    "high": "근거 많음",
+    "medium": "근거 보통",
+    "low": "근거 적음",
+}
+
+DEAL_DECISION_LABELS = {
+    "approve_deal": "공개 승인",
+    "reject_deal": "노출 제외",
+    "hold": "보류",
+}
+
+OFFER_DECISION_LABELS = {
+    "approve_match": "같은 상품 확인",
+    "reject_match": "다른 상품 처리",
+    "exclude": "기준가 제외",
+}
+
 
 def money(value: int | None) -> str:
     return "-" if value is None else f"{int(value):,}원"
@@ -28,6 +62,32 @@ def pct(value: float | None) -> str:
 
 def esc(value: object) -> str:
     return html.escape("" if value is None else str(value), quote=True)
+
+
+def publication_label(status: str | None) -> str:
+    return PUBLICATION_LABELS.get(status or "", status or "-")
+
+
+def match_label(status: str | None) -> str:
+    return MATCH_LABELS.get(status or "", status or "-")
+
+
+def confidence_label(value: str | None) -> str:
+    return CONFIDENCE_LABELS.get(value or "", value or "-")
+
+
+def deal_evidence(row) -> tuple[str, str]:
+    if row["discount_vs_30d_pct"] is not None:
+        return (
+            f"30일 중앙가 대비 {pct(row['discount_vs_30d_pct'])} 저렴",
+            f"30일 중앙 {money(row['historical_median_30d_krw'])} · 시장 중앙 {money(row['market_median_price_krw'])}",
+        )
+    if row["discount_vs_market_pct"] is not None:
+        return (
+            f"오늘 수집가 중앙값 대비 {pct(row['discount_vs_market_pct'])} 저렴",
+            f"시장 중앙 {money(row['market_median_price_krw'])} · 30일 데이터 누적 전 임시 기준",
+        )
+    return ("판정 근거 부족", "가격 표본이 더 필요합니다.")
 
 
 def search_links(query: str) -> str:
@@ -102,6 +162,7 @@ def layout(content: str, message: str = "") -> bytes:
     tr:first-child th {{ border-top: 0; }}
     .title {{ font-weight: 650; }}
     .sub {{ color: var(--muted); font-size: 12px; margin-top: 2px; }}
+    .explain {{ color: var(--text); font-size: 13px; font-weight: 650; }}
     .badge {{ display: inline-block; border-radius: 999px; padding: 2px 7px; font-size: 12px; border: 1px solid var(--line); }}
     .auto_approved, .approved {{ color: var(--ok); border-color: #86efac; background: #f0fdf4; }}
     .needs_review, .candidate {{ color: var(--warn); border-color: #fde68a; background: #fffbeb; }}
@@ -165,7 +226,7 @@ def render_dashboard(db_path: Path, message: str = "") -> bytes:
       <div class="metric"><div class="label">가격 스냅샷</div><div class="value">{metrics['price_snapshots']}</div></div>
       <div class="metric"><div class="label">검수 큐</div><div class="value">{metrics['review_queue']}</div></div>
       <div class="metric"><div class="label">자동 후보</div><div class="value">{metrics['auto_approved_deals']}</div></div>
-      <div class="metric"><div class="label">수동 필요</div><div class="value">{metrics['needs_review_deals']}</div></div>
+      <div class="metric"><div class="label">확인 필요</div><div class="value">{metrics['needs_review_deals']}</div></div>
     </section>
     <section class="panel">
       <h2>최근 실행</h2>
@@ -176,8 +237,7 @@ def render_dashboard(db_path: Path, message: str = "") -> bytes:
     deal_rows = []
     for row in deals:
         query = f"{row['brand']} {row['product']}"
-        discount = row["discount_vs_30d_pct"] if row["discount_vs_30d_pct"] is not None else row["discount_vs_market_pct"]
-        basis = "30일" if row["discount_vs_30d_pct"] is not None else "시장"
+        evidence, evidence_detail = deal_evidence(row)
         deal_rows.append(
             f"""
             <tr>
@@ -187,14 +247,14 @@ def render_dashboard(db_path: Path, message: str = "") -> bytes:
                 <div class="sub">{search_links(query)}</div>
               </td>
               <td>{money(row['current_min_price_krw'])}</td>
-              <td>{basis} {pct(discount)}<div class="sub">시장 중앙 {money(row['market_median_price_krw'])}</div></td>
-              <td><strong>{row['deal_score']}</strong><div class="sub">{esc(row['confidence'])}</div></td>
-              <td><span class="badge {esc(row['publication_status'])}">{esc(row['publication_status'])}</span></td>
+              <td><div class="explain">{esc(evidence)}</div><div class="sub">{esc(evidence_detail)}</div></td>
+              <td><strong>{row['deal_score']}</strong><div class="sub">{esc(confidence_label(row['confidence']))}</div></td>
+              <td><span class="badge {esc(row['publication_status'])}">{esc(publication_label(row['publication_status']))}</span></td>
               <td>
                 <div class="actions">
-                  <a class="button" href="{esc(row['best_url'])}" target="_blank" rel="noreferrer">원문</a>
-                  <form method="post" action="/deal-decision"><input type="hidden" name="id" value="{row['evaluation_id']}"><input type="hidden" name="decision" value="approve_deal"><button type="submit">특가 공개</button></form>
-                  <form method="post" action="/deal-decision"><input type="hidden" name="id" value="{row['evaluation_id']}"><input type="hidden" name="decision" value="reject_deal"><button class="danger" type="submit">공개 제외</button></form>
+                  <a class="button" href="{esc(row['best_url'])}" target="_blank" rel="noreferrer">판매처 확인</a>
+                  <form method="post" action="/deal-decision"><input type="hidden" name="id" value="{row['evaluation_id']}"><input type="hidden" name="decision" value="approve_deal"><button type="submit" title="사용자용 화면에 공개할 만한 특가로 승인합니다.">공개 승인</button></form>
+                  <form method="post" action="/deal-decision"><input type="hidden" name="id" value="{row['evaluation_id']}"><input type="hidden" name="decision" value="reject_deal"><button class="danger" type="submit" title="가격 근거가 약하거나 상품이 애매해서 사용자용 화면에서 제외합니다.">노출 제외</button></form>
                 </div>
               </td>
             </tr>
@@ -202,9 +262,9 @@ def render_dashboard(db_path: Path, message: str = "") -> bytes:
         )
     deal_html = f"""
     <section class="panel">
-      <h2>오늘의 딜 판정</h2>
+      <h2>특가 후보 판정</h2>
       <table>
-        <thead><tr><th>상품</th><th>현재가</th><th>할인 판단</th><th>점수</th><th>상태</th><th>액션</th></tr></thead>
+        <thead><tr><th>상품</th><th>현재가</th><th>왜 후보인가</th><th>점수/근거</th><th>공개 상태</th><th>검수</th></tr></thead>
         <tbody>{''.join(deal_rows) or '<tr><td colspan="6">아직 평가 데이터가 없습니다.</td></tr>'}</tbody>
       </table>
     </section>
@@ -222,13 +282,13 @@ def render_dashboard(db_path: Path, message: str = "") -> bytes:
                 <div class="sub">{search_links(query)}</div>
               </td>
               <td>{money(row['normalized_price_krw'] or row['package_price_krw'])}<div class="sub">묶음 {esc(row['pack_count'])} · {esc(row['volume_value'])}{esc(row['volume_unit'])}</div></td>
-              <td><span class="badge {esc(row['match_status'])}">{esc(row['match_status'])}</span><div class="sub">score {esc(row['match_score'])} {esc(row['exclusion_reason'] or '')}</div></td>
+              <td><span class="badge {esc(row['match_status'])}">{esc(match_label(row['match_status']))}</span><div class="sub">매칭 점수 {esc(row['match_score'])} {esc(row['exclusion_reason'] or '')}</div></td>
               <td>
                 <div class="actions">
-                  <a class="button" href="{esc(row['url'])}" target="_blank" rel="noreferrer">원문</a>
-                  <form method="post" action="/offer-decision"><input type="hidden" name="id" value="{row['id']}"><input type="hidden" name="decision" value="approve_match"><button type="submit">같은 상품</button></form>
-                  <form method="post" action="/offer-decision"><input type="hidden" name="id" value="{row['id']}"><input type="hidden" name="decision" value="reject_match"><button type="submit">다른 상품</button></form>
-                  <form method="post" action="/offer-decision"><input type="hidden" name="id" value="{row['id']}"><input type="hidden" name="decision" value="exclude"><button class="danger" type="submit">제외</button></form>
+                  <a class="button" href="{esc(row['url'])}" target="_blank" rel="noreferrer">판매처 확인</a>
+                  <form method="post" action="/offer-decision"><input type="hidden" name="id" value="{row['id']}"><input type="hidden" name="decision" value="approve_match"><button type="submit" title="이 판매처 상품이 왼쪽의 기준 상품과 같은 상품이면 선택합니다.">같은 상품 맞음</button></form>
+                  <form method="post" action="/offer-decision"><input type="hidden" name="id" value="{row['id']}"><input type="hidden" name="decision" value="reject_match"><button type="submit" title="브랜드, 제품명, 용량, 옵션이 달라 같은 상품으로 보면 안 될 때 선택합니다.">다른 상품임</button></form>
+                  <form method="post" action="/offer-decision"><input type="hidden" name="id" value="{row['id']}"><input type="hidden" name="decision" value="exclude"><button class="danger" type="submit" title="세트, 리필, 해외배송 등 가격 기준에 쓰면 안 되는 후보를 제외합니다.">가격기준 제외</button></form>
                 </div>
               </td>
             </tr>
@@ -238,7 +298,7 @@ def render_dashboard(db_path: Path, message: str = "") -> bytes:
     <section class="panel">
       <h2>상품 매칭 검수</h2>
       <table>
-        <thead><tr><th>후보</th><th>가격</th><th>매칭</th><th>액션</th></tr></thead>
+        <thead><tr><th>수집된 판매처 상품</th><th>보정가</th><th>매칭 상태</th><th>검수</th></tr></thead>
         <tbody>{''.join(queue_rows) or '<tr><td colspan="4">검수할 후보가 없습니다.</td></tr>'}</tbody>
       </table>
     </section>
@@ -291,7 +351,7 @@ class AdminHandler(BaseHTTPRequestHandler):
         with connect(self.db_path) as conn:
             apply_migrations(conn)
             decide_offer(conn, offer_id, decision)
-        APP_STATE["last_message"] = f"오퍼 #{offer_id} 처리 완료: {decision}"
+        APP_STATE["last_message"] = f"오퍼 #{offer_id} 처리 완료: {OFFER_DECISION_LABELS.get(decision, decision)}"
 
     def _handle_deal_decision(self, form: dict[str, list[str]]) -> None:
         evaluation_id = int(form.get("id", ["0"])[0])
@@ -299,7 +359,7 @@ class AdminHandler(BaseHTTPRequestHandler):
         with connect(self.db_path) as conn:
             apply_migrations(conn)
             decide_deal(conn, evaluation_id, decision)
-        APP_STATE["last_message"] = f"딜 #{evaluation_id} 처리 완료: {decision}"
+        APP_STATE["last_message"] = f"딜 #{evaluation_id} 처리 완료: {DEAL_DECISION_LABELS.get(decision, decision)}"
 
     def _send_html(self, body: bytes) -> None:
         self.send_response(200)
