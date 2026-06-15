@@ -9,6 +9,7 @@ from .db import init_db, connect
 from .evaluation import latest_deal_report
 from .paths import DB_PATH
 from .pipeline import run_collection
+from .retention import cleanup_processed_files, prune_price_snapshots
 from .web_admin import run_admin_server
 
 
@@ -22,9 +23,10 @@ def cmd_init_db(args: argparse.Namespace) -> None:
 
 
 def cmd_collect(args: argparse.Namespace) -> None:
+    write_csv = args.write_csv and not args.no_csv
     summary = run_collection(
         db_path=_db_path(args.db),
-        write_csv_outputs=not args.no_csv,
+        write_csv_outputs=write_csv,
         keep_raw=args.keep_raw,
         limit_per_seed=args.limit_per_seed,
     )
@@ -60,6 +62,23 @@ def cmd_admin_server(args: argparse.Namespace) -> None:
     run_admin_server(host=args.host, port=args.port, db_path=_db_path(args.db))
 
 
+def cmd_cleanup(args: argparse.Namespace) -> None:
+    apply = args.apply
+    with connect(_db_path(args.db)) as conn:
+        results = {
+            "processed_files": cleanup_processed_files(
+                keep_days=args.processed_days,
+                apply=apply,
+            ),
+            "price_snapshots": prune_price_snapshots(
+                conn,
+                keep_days=args.snapshot_days,
+                apply=apply,
+            ),
+        }
+    print(json.dumps(results, ensure_ascii=False, indent=2))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="beauty-deal-radar")
     parser.add_argument("--db", help="SQLite DB path. Defaults to data/beauty_deals.sqlite3")
@@ -69,7 +88,8 @@ def build_parser() -> argparse.ArgumentParser:
     init_db_parser.set_defaults(func=cmd_init_db)
 
     collect_parser = sub.add_parser("collect", help="Collect offers/deal posts and evaluate deals")
-    collect_parser.add_argument("--no-csv", action="store_true", help="Do not write CSV/JSON snapshots")
+    collect_parser.add_argument("--write-csv", action="store_true", help="Write debug CSV/JSON snapshots under data/processed")
+    collect_parser.add_argument("--no-csv", action="store_true", help=argparse.SUPPRESS)
     collect_parser.add_argument("--keep-raw", action="store_true", help="Persist raw HTML for parser debugging")
     collect_parser.add_argument("--limit-per-seed", type=int, default=8)
     collect_parser.set_defaults(func=cmd_collect)
@@ -86,6 +106,12 @@ def build_parser() -> argparse.ArgumentParser:
     admin_parser.add_argument("--host", default="127.0.0.1")
     admin_parser.add_argument("--port", type=int, default=8765)
     admin_parser.set_defaults(func=cmd_admin_server)
+
+    cleanup_parser = sub.add_parser("cleanup", help="Preview or apply local retention cleanup")
+    cleanup_parser.add_argument("--processed-days", type=int, default=7, help="Keep CSV/JSON debug snapshots for this many days")
+    cleanup_parser.add_argument("--snapshot-days", type=int, default=180, help="Keep raw price snapshots for this many days")
+    cleanup_parser.add_argument("--apply", action="store_true", help="Actually delete matched local files/rows")
+    cleanup_parser.set_defaults(func=cmd_cleanup)
     return parser
 
 

@@ -280,7 +280,7 @@ class AdminHandler(BaseHTTPRequestHandler):
             return
         APP_STATE["collecting"] = True
         try:
-            summary = run_collection(db_path=self.db_path, write_csv_outputs=True, keep_raw=False)
+            summary = run_collection(db_path=self.db_path, write_csv_outputs=False, keep_raw=False)
             APP_STATE["last_message"] = "수집 완료: " + json.dumps(summary, ensure_ascii=False)
         finally:
             APP_STATE["collecting"] = False
@@ -328,4 +328,3 @@ def run_admin_server_in_thread(host: str = "127.0.0.1", port: int = 8765, db_pat
     thread = threading.Thread(target=run_admin_server, args=(host, port, db_path), daemon=True)
     thread.start()
     return thread
-

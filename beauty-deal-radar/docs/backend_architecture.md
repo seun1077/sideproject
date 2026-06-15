@@ -86,3 +86,16 @@ deal publication approval
 
 Approved offers keep contributing to future price snapshots.
 Deal evaluations are recalculated every collection run because a valid product can be a hot deal today and a normal price tomorrow.
+
+## Retention
+
+The DB is the source of truth. CSV/JSON exports are debug artifacts and are disabled by default in the admin flow. Raw HTML is only kept when parser debugging is explicitly enabled.
+
+Recommended local defaults:
+
+- Keep raw `price_snapshots` for 180 days.
+- Keep compact `daily_product_price_stats` indefinitely.
+- Keep published deal, review decision, product, and source metadata indefinitely.
+- Keep `data/processed` debug exports for 7 days when they are intentionally generated.
+
+Use `scripts/manage.py cleanup` to preview local retention cleanup and `scripts/manage.py cleanup --apply` to apply it.

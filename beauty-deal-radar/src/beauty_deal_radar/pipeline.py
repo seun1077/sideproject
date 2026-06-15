@@ -57,7 +57,7 @@ def post_to_row(post: DealPostCandidate, collected_at: str) -> dict:
 
 def run_collection(
     db_path: Path = DB_PATH,
-    write_csv_outputs: bool = True,
+    write_csv_outputs: bool = False,
     keep_raw: bool = False,
     limit_per_seed: int = 8,
 ) -> dict:
@@ -133,6 +133,7 @@ def run_collection(
         "algumon_deal_posts": len(post_rows),
         "deal_evaluations": len(report_rows),
         "top_deal_candidates": len([row for row in report_rows if (row["discount_vs_market_pct"] or 0) >= 15]),
+        "csv_outputs_written": write_csv_outputs,
         "error": error,
     }
     if write_csv_outputs:
@@ -142,4 +143,3 @@ def run_collection(
         write_csv(PROCESSED / f"deal_evaluations_{stamp}.csv", report_rows)
         write_json(PROCESSED / f"summary_{stamp}.json", summary)
     return summary
-

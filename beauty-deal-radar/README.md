@@ -28,6 +28,7 @@ C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\p
 C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py collect
 C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py report
 C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py review-queue
+C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py cleanup
 C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py admin-server
 ```
 
@@ -38,8 +39,48 @@ C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\p
 ```
 
 The SQLite database is written to `data/beauty_deals.sqlite3`.
-CSV/JSON snapshots are written under `data/processed`.
+CSV/JSON snapshots are not written by default. Use `collect --write-csv` only when debugging parser output.
 Raw HTML is only stored when `--keep-raw` is passed.
+
+## Storage And Retention
+
+GitHub stores only code, seed data, migrations, and documentation. Runtime data stays outside Git:
+
+- Local development DB: `data/beauty_deals.sqlite3`
+- Optional debug exports: `data/processed/*.csv` and `data/processed/*.json`
+- Optional raw HTML: `data/raw/**/*.html`
+
+The long-term source of truth is the database, not CSV files. The pipeline keeps raw `price_snapshots` for detailed recent analysis and writes compact `daily_product_price_stats` for long-term historical baselines. This lets the project keep 30/90/180-day price logic without storing every raw observation forever.
+
+Preview local cleanup:
+
+```powershell
+C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py cleanup
+```
+
+Apply cleanup:
+
+```powershell
+C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py cleanup --apply
+```
+
+Defaults:
+
+- keep debug CSV/JSON exports for 7 days
+- keep raw `price_snapshots` for 180 days
+- keep `daily_product_price_stats`, products, offers, review decisions, and published deals
+
+## Production Migration
+
+The first local version uses SQLite because it is simple and cheap during product discovery. Before public launch, move the operational database to managed Postgres such as Supabase, Neon, Railway, Render, or RDS.
+
+Target production shape:
+
+- Web/admin app runs on a small server.
+- Scheduled collector runs daily or a few times per day.
+- Collector writes to managed Postgres instead of the local SQLite file.
+- Optional raw/debug files go to object storage such as S3 or Cloudflare R2.
+- GitHub continues to store code only.
 
 ## Admin Page
 
