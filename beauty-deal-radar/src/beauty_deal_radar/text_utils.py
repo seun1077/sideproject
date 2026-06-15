@@ -1,0 +1,65 @@
+from __future__ import annotations
+
+import re
+
+
+PRICE_RE = re.compile(r"(?<!\d)(\d{1,3}(?:,\d{3})+|\d{4,8})\s*원")
+VOLUME_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(ml|mL|ML|g|G|매)")
+SPACE_RE = re.compile(r"\s+")
+
+
+def clean(text: str | None) -> str:
+    return SPACE_RE.sub(" ", text or "").strip()
+
+
+def compact(text: str | None) -> str:
+    return re.sub(r"[^0-9A-Za-z가-힣]+", "", text or "").lower()
+
+
+def parse_price(text: str | None) -> int | None:
+    prices: list[int] = []
+    for raw in PRICE_RE.findall(text or ""):
+        value = int(raw.replace(",", ""))
+        if 500 <= value <= 2_000_000:
+            prices.append(value)
+    return min(prices) if prices else None
+
+
+def parse_volume(text: str | None) -> tuple[float, str] | None:
+    match = VOLUME_RE.search(text or "")
+    if not match:
+        return None
+    unit = match.group(2).lower()
+    if unit == "ml":
+        unit = "ml"
+    elif unit == "g":
+        unit = "g"
+    return float(match.group(1)), unit
+
+
+def parse_pack_count(text: str | None, target_volume: tuple[float, str] | None = None) -> int:
+    text = text or ""
+    if target_volume:
+        volume_value, volume_unit = target_volume
+        volume_number = int(volume_value) if volume_value.is_integer() else volume_value
+        exact = re.compile(
+            rf"{re.escape(str(volume_number))}\s*{re.escape(volume_unit)}\s*(?:x|X|×|\*|\s)?\s*(\d+)\s*(?:개|입|set|SET|세트)?"
+        )
+        matched_counts = [int(match.group(1)) for match in exact.finditer(text)]
+        matched_counts = [count for count in matched_counts if 1 <= count <= 20]
+        if matched_counts:
+            return max(matched_counts)
+
+    counts: list[int] = []
+    for match in re.finditer(r"(?:x|X|×|\*)\s*(\d+)|(\d+)\s*(?:개|입|set|SET|세트)", text):
+        raw = match.group(1) or match.group(2)
+        if raw:
+            value = int(raw)
+            if 1 <= value <= 20:
+                counts.append(value)
+    return max(counts) if counts else 1
+
+
+def canonical_key(brand: str, product: str, volume_hint: str) -> str:
+    return compact(f"{brand}:{product}:{volume_hint}")
+

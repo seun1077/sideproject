@@ -1,4 +1,6 @@
 __pycache__/
 .venv/
+data/*.sqlite3
+data/*.sqlite3-*
 data/raw/**/*.html
 data/raw/**/*.tmp
