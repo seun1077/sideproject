@@ -98,6 +98,20 @@ class PublicApiTest(unittest.TestCase):
                 """,
                 (run_id, product_id, offer_id),
             )
+            conn.execute(
+                """
+                INSERT INTO offers (
+                    source_id, source_offer_key, product_id, title, url,
+                    package_price_krw, normalized_price_krw, pack_count,
+                    match_score, match_status, baseline_eligible,
+                    first_seen_at, last_seen_at
+                )
+                VALUES (?, 'offer-2', ?, '라운드랩 자작나무 수분 선크림 50ml 1+1+1',
+                        'https://example.com/bundle', 39000, 13000, 3, 95,
+                        'approved', 1, '2026-06-15T00:00:00Z', '2026-06-15T00:00:00Z')
+                """,
+                (source_id, product_id),
+            )
 
             deals = list_deals(conn, visibility="public")
             history = price_history(conn, product_id, days=90)
@@ -105,10 +119,11 @@ class PublicApiTest(unittest.TestCase):
         self.assertEqual(len(deals), 1)
         self.assertEqual(deals[0]["brand"], "라운드랩")
         self.assertEqual(deals[0]["discount_pct"], 20.0)
+        self.assertEqual(deals[0]["price_gap_krw"], 3000)
+        self.assertEqual(deals[0]["other_options"][0]["unit_price_krw"], 13000)
         self.assertEqual(len(history), 1)
         self.assertEqual(history[0]["median_price_krw"], 13000)
 
 
 if __name__ == "__main__":
     unittest.main()
-

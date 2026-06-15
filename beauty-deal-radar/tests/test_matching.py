@@ -16,6 +16,18 @@ class TextNormalizationTest(unittest.TestCase):
         title = "라운드 랩 자작 나무 수분 선크림 50ml x3SET"
         self.assertEqual(parse_pack_count(title, parse_volume("50ml")), 3)
 
+    def test_pack_count_handles_one_plus_one_plus_one(self) -> None:
+        title = "라운드랩 자작나무 수분 선크림 50ml 1+1+1"
+        self.assertEqual(parse_pack_count(title, parse_volume("50ml")), 3)
+
+    def test_pack_count_handles_repeated_target_volume(self) -> None:
+        title = "라운드랩 자작나무 수분 선크림 50ml+50ml+50ml"
+        self.assertEqual(parse_pack_count(title, parse_volume("50ml")), 3)
+
+    def test_pack_count_does_not_count_gift_volume_bundle(self) -> None:
+        title = "조선 미녀 맑은 쌀 선크림 50ml 기획 (+10ml x 2개)"
+        self.assertEqual(parse_pack_count(title, parse_volume("50ml")), 1)
+
 
 class MatchingTest(unittest.TestCase):
     def test_rejects_volume_mismatch(self) -> None:
@@ -45,4 +57,3 @@ class MatchingTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

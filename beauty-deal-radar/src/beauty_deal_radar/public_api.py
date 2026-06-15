@@ -19,6 +19,61 @@ def _deal_basis(row: sqlite3.Row) -> tuple[str, float | None, int | None]:
     return "unknown", None, None
 
 
+def _price_gap(current_price: int | None, reference_price: int | None) -> int | None:
+    if current_price is None or reference_price is None:
+        return None
+    return reference_price - current_price
+
+
+def _offer_options(
+    conn: sqlite3.Connection,
+    product_id: int,
+    *,
+    exclude_offer_id: int | None = None,
+    limit: int = 4,
+) -> list[dict]:
+    params: list[object] = [product_id]
+    exclude_sql = ""
+    if exclude_offer_id is not None:
+        exclude_sql = "AND o.id != ?"
+        params.append(exclude_offer_id)
+    params.append(limit)
+    rows = conn.execute(
+        f"""
+        SELECT
+            o.id,
+            o.title,
+            o.url,
+            o.package_price_krw,
+            o.normalized_price_krw,
+            o.pack_count,
+            s.display_name AS source
+        FROM offers o
+        JOIN sources s ON s.id = o.source_id
+        WHERE o.product_id = ?
+          {exclude_sql}
+          AND o.baseline_eligible = 1
+          AND o.normalized_price_krw IS NOT NULL
+          AND o.match_status IN ('candidate', 'approved')
+        ORDER BY o.normalized_price_krw ASC, o.package_price_krw ASC
+        LIMIT ?
+        """,
+        params,
+    ).fetchall()
+    return [
+        {
+            "offer_id": row["id"],
+            "title": row["title"],
+            "url": row["url"],
+            "source": row["source"],
+            "package_price_krw": _optional_int(row["package_price_krw"]),
+            "unit_price_krw": _optional_int(row["normalized_price_krw"]),
+            "pack_count": _optional_int(row["pack_count"]),
+        }
+        for row in rows
+    ]
+
+
 def service_summary(conn: sqlite3.Connection) -> dict:
     latest_run = conn.execute(
         """
@@ -104,6 +159,7 @@ def list_deals(
             cp.target_volume_unit,
             o.title AS best_title,
             o.url AS best_url,
+            o.id AS offer_id,
             o.package_price_krw,
             o.normalized_price_krw,
             o.pack_count,
@@ -134,6 +190,19 @@ def list_deals(
     deals: list[dict] = []
     for row in rows:
         basis, discount, reference_price = _deal_basis(row)
+        current_price = _optional_int(row["current_min_price_krw"])
+        options = _offer_options(
+            conn,
+            int(row["product_id"]),
+            exclude_offer_id=_optional_int(row["offer_id"]),
+        )
+        cheaper_options = [
+            option
+            for option in options
+            if option["unit_price_krw"] is not None
+            and current_price is not None
+            and option["unit_price_krw"] < current_price
+        ]
         deals.append(
             {
                 "evaluation_id": row["evaluation_id"],
@@ -149,9 +218,10 @@ def list_deals(
                 "title": row["best_title"],
                 "url": row["best_url"],
                 "source": row["source"],
-                "current_price_krw": _optional_int(row["current_min_price_krw"]),
+                "current_price_krw": current_price,
                 "package_price_krw": _optional_int(row["package_price_krw"]),
                 "reference_price_krw": reference_price,
+                "price_gap_krw": _price_gap(current_price, reference_price),
                 "discount_pct": discount,
                 "discount_basis": basis,
                 "discount_vs_market_pct": _optional_float(row["discount_vs_market_pct"]),
@@ -163,6 +233,8 @@ def list_deals(
                 "is_published": row["published_status"] == "published",
                 "evaluated_at": row["evaluated_at"],
                 "pack_count": _optional_int(row["pack_count"]),
+                "other_options": options,
+                "cheaper_options": cheaper_options,
             }
         )
     return deals
@@ -262,4 +334,3 @@ def categories(conn: sqlite3.Connection) -> list[str]:
             """
         ).fetchall()
     ]
-

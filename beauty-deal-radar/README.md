@@ -29,6 +29,7 @@ C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\p
 C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py report
 C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py review-queue
 C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py cleanup
+C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py recalculate-prices
 C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py admin-server
 C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py public-server
 ```
@@ -128,6 +129,8 @@ The public MVP reads from the same SQLite database as the admin page. It exposes
 - `GET /api/products/{id}/price-history?days=90`
 
 If no successful collection has run yet, the page returns an empty state instead of mock data.
+
+Deal cards show the candidate unit price, the current collected market reference price, the won/pct gap, and other collected bundle/options for the same canonical product. Internal labels such as confidence and publication status are intentionally not shown on the public screen.
 
 ## Backend Structure
 

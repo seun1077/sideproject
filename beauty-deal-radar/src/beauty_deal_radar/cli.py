@@ -7,6 +7,7 @@ from pathlib import Path
 from .admin import review_queue
 from .db import init_db, connect
 from .evaluation import latest_deal_report
+from .maintenance import recalculate_normalized_prices
 from .paths import DB_PATH
 from .pipeline import run_collection
 from .public_server import run_public_server
@@ -85,6 +86,12 @@ def cmd_cleanup(args: argparse.Namespace) -> None:
     print(json.dumps(results, ensure_ascii=False, indent=2))
 
 
+def cmd_recalculate_prices(args: argparse.Namespace) -> None:
+    with connect(_db_path(args.db)) as conn:
+        results = recalculate_normalized_prices(conn)
+    print(json.dumps(results, ensure_ascii=False, indent=2))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="beauty-deal-radar")
     parser.add_argument("--db", help="SQLite DB path. Defaults to data/beauty_deals.sqlite3")
@@ -123,6 +130,12 @@ def build_parser() -> argparse.ArgumentParser:
     cleanup_parser.add_argument("--snapshot-days", type=int, default=180, help="Keep raw price snapshots for this many days")
     cleanup_parser.add_argument("--apply", action="store_true", help="Actually delete matched local files/rows")
     cleanup_parser.set_defaults(func=cmd_cleanup)
+
+    recalc_parser = sub.add_parser(
+        "recalculate-prices",
+        help="Recompute pack counts and per-unit prices for existing offers",
+    )
+    recalc_parser.set_defaults(func=cmd_recalculate_prices)
     return parser
 
 

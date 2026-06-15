@@ -199,6 +199,29 @@ INDEX_HTML = """<!doctype html>
       font-size: 20px;
       font-weight: 800;
     }
+    .price-label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+    }
+    .compare-list {
+      margin-top: 9px;
+      display: grid;
+      gap: 5px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .compare-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      border-top: 1px solid #eef1f5;
+      padding-top: 5px;
+    }
+    .compare-row strong {
+      color: var(--text);
+      white-space: nowrap;
+    }
     .discount {
       color: var(--red);
       background: var(--red-soft);
@@ -207,25 +230,6 @@ INDEX_HTML = """<!doctype html>
       padding: 2px 7px;
       font-size: 12px;
       font-weight: 750;
-    }
-    .badge {
-      display: inline-block;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      padding: 2px 7px;
-      font-size: 12px;
-      color: var(--muted);
-      background: #fbfcfd;
-    }
-    .badge.high, .badge.medium {
-      color: var(--teal);
-      background: var(--teal-soft);
-      border-color: #a7ddd4;
-    }
-    .badge.needs_review, .badge.draft {
-      color: var(--yellow);
-      background: var(--yellow-soft);
-      border-color: #f2d788;
     }
     .actions {
       margin-top: 10px;
@@ -312,10 +316,10 @@ INDEX_HTML = """<!doctype html>
     <div class="toolbar">
       <input id="searchInput" type="search" placeholder="브랜드 또는 상품명">
       <select id="categorySelect"><option value="">전체 카테고리</option></select>
-      <div class="segmented" aria-label="딜 상태">
-        <button class="active" data-visibility="all" type="button">전체 후보</button>
-        <button data-visibility="public" type="button">공개 딜</button>
-        <button data-visibility="review" type="button">검수 필요</button>
+      <div class="segmented" aria-label="할인율 필터">
+        <button class="active" data-min-discount="0" type="button">전체</button>
+        <button data-min-discount="20" type="button">20% 이상</button>
+        <button data-min-discount="40" type="button">40% 이상</button>
       </div>
     </div>
     <div class="content">
@@ -339,7 +343,7 @@ INDEX_HTML = """<!doctype html>
       products: [],
       categories: [],
       selectedProductId: null,
-      visibility: "all",
+      minDiscount: 0,
       query: "",
       category: "",
     };
@@ -395,12 +399,32 @@ INDEX_HTML = """<!doctype html>
     function filteredDeals() {
       const query = state.query.toLowerCase();
       return state.deals.filter((deal) => {
-        if (state.visibility === "public" && !["approved", "auto_approved"].includes(deal.publication_status) && !deal.is_published) return false;
-        if (state.visibility === "review" && !["needs_review", "draft"].includes(deal.publication_status)) return false;
+        if ((deal.discount_pct || 0) < state.minDiscount) return false;
         if (state.category && deal.category !== state.category) return false;
         if (query && !`${deal.brand} ${deal.product} ${deal.title}`.toLowerCase().includes(query)) return false;
         return true;
       });
+    }
+
+    function optionLabel(option) {
+      const count = option.pack_count && option.pack_count > 1 ? `${option.pack_count}개 묶음` : "단품/옵션";
+      return `${count} ${won(option.package_price_krw)} · 개당 ${won(option.unit_price_krw)}`;
+    }
+
+    function renderOptions(deal) {
+      const options = deal.other_options || [];
+      if (!options.length) return "";
+      const cheaper = deal.cheaper_options || [];
+      const heading = cheaper.length
+        ? "더 싼 묶음 옵션이 수집됨"
+        : "비교된 다른 옵션";
+      const rows = options.slice(0, 2).map((option) => `
+        <div class="compare-row">
+          <span>${escapeHtml(optionLabel(option))}</span>
+          ${option.url ? `<a href="${escapeHtml(option.url)}" target="_blank" rel="noreferrer">확인</a>` : ""}
+        </div>
+      `).join("");
+      return `<div class="compare-list"><div><strong>${heading}</strong></div>${rows}</div>`;
     }
 
     function renderDeals() {
@@ -417,12 +441,12 @@ INDEX_HTML = """<!doctype html>
             <div class="deal-title">${escapeHtml(deal.brand)} ${escapeHtml(deal.product)}</div>
             <div class="deal-sub">${escapeHtml(deal.title || "")}</div>
             <div class="price-line">
+              <span class="price-label">후보가</span>
               <span class="price">${won(deal.current_price_krw)}</span>
-              <span class="discount">${pct(deal.discount_pct)}</span>
-              <span class="badge ${escapeHtml(deal.confidence)}">${escapeHtml(deal.confidence)}</span>
-              <span class="badge ${escapeHtml(deal.publication_status)}">${escapeHtml(deal.publication_status)}</span>
+              <span class="discount">${won(deal.price_gap_krw)} 저렴 · ${pct(deal.discount_pct)}</span>
             </div>
-            <div class="meta">기준 ${deal.discount_basis === "30d" ? "30일" : "현재 시장"} · 점수 ${deal.deal_score} · ${escapeHtml(deal.source || "-")}</div>
+            <div class="meta">현재 수집 시중가 ${won(deal.reference_price_krw)} · ${deal.discount_basis === "30d" ? "30일 중앙가 기준" : "오늘 수집 중앙가 기준"} · ${escapeHtml(deal.source || "-")}</div>
+            ${renderOptions(deal)}
             <div class="actions">
               ${deal.url ? `<a class="button" href="${escapeHtml(deal.url)}" target="_blank" rel="noreferrer">판매처</a>` : ""}
             </div>
@@ -461,7 +485,7 @@ INDEX_HTML = """<!doctype html>
           </div>
           <div>
             <div style="font-weight:800;text-align:right">${won(product.current_price_krw)}</div>
-            <div class="meta" style="text-align:right">${pct(product.discount_vs_30d_pct ?? product.discount_vs_market_pct)}</div>
+            <div class="meta" style="text-align:right">시중 ${won(product.market_median_price_krw)}</div>
           </div>
         </div>
       `).join("");
@@ -520,10 +544,10 @@ INDEX_HTML = """<!doctype html>
       renderDeals();
       renderProducts();
     });
-    document.querySelectorAll("[data-visibility]").forEach((button) => {
+    document.querySelectorAll("[data-min-discount]").forEach((button) => {
       button.addEventListener("click", () => {
-        state.visibility = button.dataset.visibility;
-        document.querySelectorAll("[data-visibility]").forEach((item) => item.classList.remove("active"));
+        state.minDiscount = Number(button.dataset.minDiscount || 0);
+        document.querySelectorAll("[data-min-discount]").forEach((item) => item.classList.remove("active"));
         button.classList.add("active");
         renderDeals();
       });
@@ -647,4 +671,3 @@ def run_public_server(host: str = "127.0.0.1", port: int = 8766, db_path: Path =
     server = ThreadingHTTPServer((host, port), handler)
     print(f"Public MVP running at http://{host}:{port}")
     server.serve_forever()
-
