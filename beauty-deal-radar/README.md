@@ -30,6 +30,7 @@ C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\p
 C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py review-queue
 C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py cleanup
 C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py admin-server
+C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py public-server
 ```
 
 The legacy shortcut still works:
@@ -103,6 +104,30 @@ The admin page can:
 - open source/search links for manual verification
 - approve or reject deal publication
 - approve, reject, or exclude offer-product matches
+
+## Public MVP
+
+Run the local public MVP server:
+
+```powershell
+C:\Users\ynkim\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe scripts\manage.py public-server --host 127.0.0.1 --port 8766
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8766/
+```
+
+The public MVP reads from the same SQLite database as the admin page. It exposes:
+
+- `GET /api/summary`
+- `GET /api/categories`
+- `GET /api/deals?visibility=all|public|review`
+- `GET /api/products`
+- `GET /api/products/{id}/price-history?days=90`
+
+If no successful collection has run yet, the page returns an empty state instead of mock data.
 
 ## Backend Structure
 

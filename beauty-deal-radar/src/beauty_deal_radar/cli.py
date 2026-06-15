@@ -9,6 +9,7 @@ from .db import init_db, connect
 from .evaluation import latest_deal_report
 from .paths import DB_PATH
 from .pipeline import run_collection
+from .public_server import run_public_server
 from .retention import cleanup_processed_files, prune_price_snapshots
 from .web_admin import run_admin_server
 
@@ -62,6 +63,11 @@ def cmd_admin_server(args: argparse.Namespace) -> None:
     run_admin_server(host=args.host, port=args.port, db_path=_db_path(args.db))
 
 
+def cmd_public_server(args: argparse.Namespace) -> None:
+    init_db(_db_path(args.db))
+    run_public_server(host=args.host, port=args.port, db_path=_db_path(args.db))
+
+
 def cmd_cleanup(args: argparse.Namespace) -> None:
     apply = args.apply
     with connect(_db_path(args.db)) as conn:
@@ -106,6 +112,11 @@ def build_parser() -> argparse.ArgumentParser:
     admin_parser.add_argument("--host", default="127.0.0.1")
     admin_parser.add_argument("--port", type=int, default=8765)
     admin_parser.set_defaults(func=cmd_admin_server)
+
+    public_parser = sub.add_parser("public-server", help="Run the local public MVP web UI and API")
+    public_parser.add_argument("--host", default="127.0.0.1")
+    public_parser.add_argument("--port", type=int, default=8766)
+    public_parser.set_defaults(func=cmd_public_server)
 
     cleanup_parser = sub.add_parser("cleanup", help="Preview or apply local retention cleanup")
     cleanup_parser.add_argument("--processed-days", type=int, default=7, help="Keep CSV/JSON debug snapshots for this many days")

@@ -87,6 +87,23 @@ deal publication approval
 Approved offers keep contributing to future price snapshots.
 Deal evaluations are recalculated every collection run because a valid product can be a hot deal today and a normal price tomorrow.
 
+## Public Read Model
+
+The public MVP reads from the same tables but does not mutate data.
+
+```text
+deal_evaluations
+  -> public deal cards
+
+canonical_products
+  -> product directory
+
+daily_product_price_stats
+  -> price history chart
+```
+
+`src/beauty_deal_radar/public_api.py` is intentionally framework-agnostic. The local server uses it through `public_server.py`, and a future FastAPI or hosted backend can reuse the same queries while replacing only the HTTP layer.
+
 ## Retention
 
 The DB is the source of truth. CSV/JSON exports are debug artifacts and are disabled by default in the admin flow. Raw HTML is only kept when parser debugging is explicitly enabled.
