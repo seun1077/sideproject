@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import urllib.parse
 from pathlib import Path
 
 from lxml import html
@@ -13,33 +12,46 @@ from ..text_utils import clean, parse_price
 from .deal_match import best_seed_match, looks_like_beauty_deal
 
 
-THEQOO_DEAL_URL = "https://theqoo.net/theqdeal"
+RULIWEB_HOTDEAL_URL = "https://bbs.ruliweb.com/market/board/1020"
+RULIWEB_CATEGORIES = (
+    "게임S/W",
+    "게임H/W",
+    "PC/가전",
+    "A/V",
+    "VR",
+    "음식",
+    "의류",
+    "취미용품",
+    "인테리어",
+    "생활용품",
+    "육아용품",
+    "레저용품",
+    "휴대폰",
+    "도서",
+    "화장품",
+    "상품권",
+)
 
 
-def _candidate_text(anchor) -> str:
+def _row_text(anchor) -> str:
     row = anchor.xpath("ancestor::tr[1]")
     if row:
         return clean(" ".join(row[0].xpath(".//text()")))
-    parent = anchor.getparent()
-    return clean(" ".join(parent.xpath(".//text()"))) if parent is not None else clean(anchor.text_content())
+    return clean(anchor.text_content())
 
 
-def _category(anchor) -> str | None:
-    row = anchor.xpath("ancestor::tr[1]")
-    if not row:
-        return None
-    text = clean(" ".join(row[0].xpath(".//text()")))
-    for category in ("잡담/질문", "먹거리", "생활용품", "가전/전자제품", "상품권/이용권", "그 외/팁", "후기", "알림/결과"):
-        if category in text:
+def _category(context: str) -> str | None:
+    for category in RULIWEB_CATEGORIES:
+        if category in context:
             return category
     return None
 
 
-def collect_theqoo_deals(
+def collect_ruliweb_deals(
     seeds: list[ProductSeed],
     raw_path: Path | None = None,
 ) -> list[DealPostCandidate]:
-    status, body, error = fetch(THEQOO_DEAL_URL)
+    status, body, error = fetch(RULIWEB_HOTDEAL_URL)
     if status != 200 or not body:
         return []
 
@@ -50,36 +62,27 @@ def collect_theqoo_deals(
     doc = html.fromstring(body)
     posts: list[DealPostCandidate] = []
     seen: set[str] = set()
-    for anchor in doc.xpath("//a[@href]"):
-        href = anchor.get("href") or ""
-        if "/theqdeal/" not in href:
+    for anchor in doc.xpath("//a[contains(@href, '/market/board/1020/read/')]"):
+        href = (anchor.get("href") or "").split("#", 1)[0]
+        if href in seen:
             continue
         title = clean(" ".join(anchor.xpath(".//text()")))
-        if not title or title in {"목록", "HOT 게시물"}:
+        if not title or title.startswith("루리웹 핫딜/예판"):
             continue
-        if len(title) < 8 and parse_price(title) is None:
+        context = _row_text(anchor)
+        category = _category(context)
+        if category != "화장품" and not looks_like_beauty_deal(context):
             continue
-        if title.endswith(")") and parse_price(title) is None:
-            continue
-        context = _candidate_text(anchor)
         price = parse_price(context) or parse_price(title)
-        if not price:
-            continue
-        category = _category(anchor)
         best_seed, match_score, matched_keywords = best_seed_match(context, seeds)
-        if best_seed is None and not looks_like_beauty_deal(context):
-            continue
         sale_starts_at, sale_ends_at = parse_sale_period(context)
-        url = urllib.parse.urljoin(THEQOO_DEAL_URL, href)
-        if url in seen:
-            continue
-        seen.add(url)
+        seen.add(href)
         posts.append(
             DealPostCandidate(
-                source_code="theqoo",
+                source_code="ruliweb",
                 product_key=seed_key(best_seed) if best_seed else None,
                 title=title[:240],
-                url=url,
+                url=href,
                 extracted_price_krw=price,
                 matched_keywords=",".join(matched_keywords[:8]),
                 match_score=match_score,
@@ -90,7 +93,7 @@ def collect_theqoo_deals(
                     "http_status": status,
                     "error": error,
                     "context": context[:500],
-                    "board_url": THEQOO_DEAL_URL,
+                    "board_url": RULIWEB_HOTDEAL_URL,
                 },
             )
         )

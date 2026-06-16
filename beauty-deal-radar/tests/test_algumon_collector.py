@@ -38,7 +38,10 @@ class AlgumonCollectorTest(unittest.TestCase):
 
     def test_beauty_terms_can_enter_source_queue_before_product_match(self) -> None:
         self.assertTrue(looks_like_beauty_deal("직잭 바이오던스 겔마스크팩 16매입 23,000원"))
-        self.assertTrue(looks_like_beauty_deal("생활용품 지마켓 디스크 바른요 허리 보호대 22,410원"))
+        self.assertTrue(looks_like_beauty_deal("올리브영 라운드랩 선크림 1+1 특가"))
+        self.assertFalse(looks_like_beauty_deal("올리브영 상품권 1만원권 8,800원"))
+        self.assertFalse(looks_like_beauty_deal("아모레몰 뷰티포인트받은거"))
+        self.assertFalse(looks_like_beauty_deal("생활용품 지마켓 디스크 바른요 허리 보호대 22,410원"))
         self.assertFalse(looks_like_beauty_deal("국내산 한돈 오겹살 구이용 15,630원"))
 
 

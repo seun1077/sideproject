@@ -27,6 +27,7 @@ def upsert_default_sources(conn: sqlite3.Connection) -> None:
         ("danawa", "Danawa", "marketplace", "https://www.danawa.com", "https://www.danawa.com/robots.txt", "public_search_probe"),
         ("algumon", "Algumon", "deal_aggregator", "https://www.algumon.com", "https://www.algumon.com/robots.txt", "public_pages_no_api"),
         ("theqoo", "TheQoo Ddeokdeal", "community", "https://theqoo.net/theqdeal", "https://theqoo.net/robots.txt", "public_board_probe"),
+        ("ruliweb", "Ruliweb Hotdeal", "community", "https://bbs.ruliweb.com/market/board/1020", "https://bbs.ruliweb.com/robots.txt", "public_board_probe"),
         ("oliveyoung", "Olive Young", "marketplace", "https://www.oliveyoung.co.kr", "https://www.oliveyoung.co.kr/robots.txt", "blocked_skip"),
         ("musinsa", "Musinsa", "marketplace", "https://www.musinsa.com", "https://www.musinsa.com/robots.txt", "review_before_collect"),
     ]
@@ -252,9 +253,10 @@ def upsert_deal_post(conn: sqlite3.Connection, post: DealPostCandidate, collecte
             """
             INSERT INTO deal_posts (
                 source_id, source_post_key, product_id, title, url, collected_at,
-                extracted_price_krw, matched_keywords, match_score, raw_payload
+                extracted_price_krw, matched_keywords, match_score, raw_payload,
+                source_category, sale_starts_at, sale_ends_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(source_id, source_post_key) DO UPDATE SET
                 product_id=excluded.product_id,
                 title=excluded.title,
@@ -263,6 +265,9 @@ def upsert_deal_post(conn: sqlite3.Connection, post: DealPostCandidate, collecte
                 extracted_price_krw=excluded.extracted_price_krw,
                 matched_keywords=excluded.matched_keywords,
                 match_score=excluded.match_score,
+                source_category=excluded.source_category,
+                sale_starts_at=excluded.sale_starts_at,
+                sale_ends_at=excluded.sale_ends_at,
                 raw_payload=excluded.raw_payload
             """,
             (
@@ -276,6 +281,9 @@ def upsert_deal_post(conn: sqlite3.Connection, post: DealPostCandidate, collecte
                 post.matched_keywords,
                 post.match_score,
                 json.dumps(post.raw_payload, ensure_ascii=False),
+                post.source_category,
+                post.sale_starts_at,
+                post.sale_ends_at,
             ),
         )
         row = conn.execute(

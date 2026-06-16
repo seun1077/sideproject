@@ -129,6 +129,18 @@ def source_deal_evidence(row) -> tuple[str, str]:
     )
 
 
+def sale_period_label(row) -> str:
+    start = row["sale_starts_at"]
+    end = row["sale_ends_at"]
+    if start and end:
+        return f"기간 {start} ~ {end}"
+    if end:
+        return f"종료 추정 {end}"
+    if start:
+        return f"시작 추정 {start}"
+    return "기간 정보 없음"
+
+
 def offer_package_note(row) -> str:
     parts = []
     if row["best_package_price_krw"] and row["best_package_price_krw"] != row["current_min_price_krw"]:
@@ -323,7 +335,8 @@ def render_dashboard(db_path: Path, message: str = "") -> bytes:
             <tr>
               <td>
                 <div class="title">{esc(row['title'])}</div>
-                <div class="sub">{esc(row['source'])} · {esc(row['collected_at'])}</div>
+                <div class="sub">{esc(row['source'])} · {esc(row['source_category'] or '-')} · {esc(row['collected_at'])}</div>
+                <div class="sub">{esc(sale_period_label(row))}</div>
                 <div class="sub">{search_links(query)}</div>
               </td>
               <td>

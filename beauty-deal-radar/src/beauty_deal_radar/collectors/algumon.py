@@ -5,6 +5,7 @@ from pathlib import Path
 
 from lxml import html
 
+from ..deal_period import parse_sale_period
 from ..http import fetch
 from ..models import DealPostCandidate, ProductSeed
 from ..repository import seed_key
@@ -43,6 +44,7 @@ def collect_algumon_latest(
         if key in seen:
             continue
         seen.add(key)
+        sale_starts_at, sale_ends_at = parse_sale_period(title)
         posts.append(
             DealPostCandidate(
                 source_code="algumon",
@@ -52,6 +54,8 @@ def collect_algumon_latest(
                 extracted_price_krw=price,
                 matched_keywords=",".join(matched_keywords[:8]),
                 match_score=match_score,
+                sale_starts_at=sale_starts_at,
+                sale_ends_at=sale_ends_at,
                 raw_payload={"http_status": status, "error": error},
             )
         )

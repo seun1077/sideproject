@@ -4,7 +4,13 @@ import traceback
 from pathlib import Path
 
 from . import __version__
-from .collectors import collect_algumon_latest, collect_danawa_for_seed, collect_theqoo_deals, probe_sources
+from .collectors import (
+    collect_algumon_latest,
+    collect_danawa_for_seed,
+    collect_ruliweb_deals,
+    collect_theqoo_deals,
+    probe_sources,
+)
 from .collectors.shared import collected_at_iso, now_stamp
 from .csv_io import write_csv, write_json
 from .db import apply_migrations, connect
@@ -50,6 +56,9 @@ def post_to_row(post: DealPostCandidate, collected_at: str) -> dict:
         "title": post.title,
         "url": post.url,
         "price_krw": post.extracted_price_krw,
+        "source_category": post.source_category,
+        "sale_starts_at": post.sale_starts_at,
+        "sale_ends_at": post.sale_ends_at,
         "matched_keywords": post.matched_keywords,
         "match_score": post.match_score,
     }
@@ -67,6 +76,7 @@ def run_collection(
     raw_dir = RAW / "danawa" if keep_raw else None
     raw_algumon = RAW / f"algumon_latest_{stamp}.html" if keep_raw else None
     raw_theqoo = RAW / f"theqoo_deals_{stamp}.html" if keep_raw else None
+    raw_ruliweb = RAW / f"ruliweb_hotdeal_{stamp}.html" if keep_raw else None
 
     with connect(db_path) as conn:
         apply_migrations(conn)
@@ -102,7 +112,8 @@ def run_collection(
 
             algumon_posts = collect_algumon_latest(seeds, raw_path=raw_algumon)
             theqoo_posts = collect_theqoo_deals(seeds, raw_path=raw_theqoo)
-            posts = [*algumon_posts, *theqoo_posts]
+            ruliweb_posts = collect_ruliweb_deals(seeds, raw_path=raw_ruliweb)
+            posts = [*algumon_posts, *theqoo_posts, *ruliweb_posts]
             for post in posts:
                 upsert_deal_post(conn, post, collected_at)
                 post_rows.append(post_to_row(post, collected_at))
@@ -135,6 +146,7 @@ def run_collection(
         "danawa_offer_rows": len(offer_rows),
         "algumon_deal_posts": len([row for row in post_rows if row["source"] == "algumon"]),
         "theqoo_deal_posts": len([row for row in post_rows if row["source"] == "theqoo"]),
+        "ruliweb_deal_posts": len([row for row in post_rows if row["source"] == "ruliweb"]),
         "source_deal_posts": len(post_rows),
         "deal_evaluations": len(report_rows),
         "top_deal_candidates": len([row for row in report_rows if (row["discount_vs_market_pct"] or 0) >= 15]),

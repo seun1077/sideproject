@@ -45,4 +45,6 @@ class DealPostCandidate:
     matched_keywords: str
     match_score: int
     raw_payload: dict
-
+    source_category: str | None = None
+    sale_starts_at: str | None = None
+    sale_ends_at: str | None = None

@@ -39,9 +39,6 @@ BEAUTY_DEAL_TOKENS = {
     "쿠션",
     "화장품",
     "뷰티",
-    "올리브영",
-    "올영",
-    "아모레",
     "이니스프리",
     "에뛰드",
     "라운드랩",
@@ -52,25 +49,12 @@ BEAUTY_DEAL_TOKENS = {
     "바이오던스",
 }
 
-LIFESTYLE_DEAL_TOKENS = {
-    "생활용품",
-    "생필품",
-    "마스크",
-    "샴푸",
-    "트리트먼트",
-    "바디워시",
-    "핸드워시",
-    "치약",
-    "칫솔",
-    "세제",
-    "섬유유연제",
-    "물티슈",
-    "휴지",
-    "주방",
-    "욕실",
-    "청소",
-    "탈취",
-    "보호대",
+EXCLUDED_SOURCE_DEAL_TOKENS = {
+    "상품권",
+    "기프트카드",
+    "네이버페이",
+    "포인트",
+    "적립",
 }
 
 
@@ -102,4 +86,6 @@ def best_seed_match(title: str, seeds: list[ProductSeed]) -> tuple[ProductSeed |
 
 
 def looks_like_beauty_deal(text: str) -> bool:
-    return any(token in text for token in BEAUTY_DEAL_TOKENS | LIFESTYLE_DEAL_TOKENS)
+    if any(token in text for token in EXCLUDED_SOURCE_DEAL_TOKENS):
+        return False
+    return any(token in text for token in BEAUTY_DEAL_TOKENS)

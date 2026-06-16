@@ -14,8 +14,14 @@ SAMPLE_HTML = """
       <td>271377</td>
       <td>생활용품</td>
       <td><a href="/theqdeal/123">지그재그)</a></td>
-      <td><a href="/theqdeal/123">직잭 바이오던스 겔마스크팩 16매입 23,000원</a></td>
+      <td><a href="/theqdeal/123">직잭 바이오던스 겔마스크팩 16매입 23,000원 ~6/17까지</a></td>
       <td>(23,000원)</td>
+    </tr>
+    <tr>
+      <td>271375</td>
+      <td>생활용품</td>
+      <td><a href="/theqdeal/125">디스크 바른요 허리 보호대</a></td>
+      <td>(22,410원)</td>
     </tr>
     <tr>
       <td>271376</td>
@@ -47,6 +53,8 @@ class TheQooCollectorTest(unittest.TestCase):
         self.assertIn("바이오던스", posts[0].title)
         self.assertEqual(posts[0].extracted_price_krw, 23000)
         self.assertIsNone(posts[0].product_key)
+        self.assertEqual(posts[0].source_category, "생활용품")
+        self.assertEqual(posts[0].sale_ends_at, "2026-06-17T23:59:00+0900")
 
 
 if __name__ == "__main__":

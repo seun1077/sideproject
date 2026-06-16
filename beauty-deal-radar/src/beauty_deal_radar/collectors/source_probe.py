@@ -12,6 +12,8 @@ TARGETS = [
     ("danawa", "https://search.danawa.com/dsearch.php?query=%EC%84%A0%ED%81%AC%EB%A6%BC"),
     ("theqoo", "https://theqoo.net/robots.txt"),
     ("theqoo", "https://theqoo.net/theqdeal"),
+    ("ruliweb", "https://bbs.ruliweb.com/robots.txt"),
+    ("ruliweb", "https://bbs.ruliweb.com/market/board/1020"),
     ("oliveyoung", "https://www.oliveyoung.co.kr/robots.txt"),
     ("musinsa", "https://www.musinsa.com/robots.txt"),
 ]
