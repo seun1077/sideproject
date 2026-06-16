@@ -313,6 +313,11 @@ def render_dashboard(db_path: Path, message: str = "") -> bytes:
             if flags
             else '<span class="safe">소스/가격 기준 양호</span>'
         )
+        approve_control = (
+            f"""<form method="post" action="/source-deal-decision"><input type="hidden" name="id" value="{row['id']}"><input type="hidden" name="decision" value="approve_source_deal"><button type="submit" title="사용자 화면의 특가 피드에 이 외부 특가 글을 공개합니다.">특가 승인</button></form>"""
+            if row["product_id"] is not None
+            else '<button type="button" disabled title="먼저 이 특가 글을 추적 상품에 매칭해야 공개할 수 있습니다.">상품 매칭 필요</button>'
+        )
         source_rows.append(
             f"""
             <tr>
@@ -332,7 +337,7 @@ def render_dashboard(db_path: Path, message: str = "") -> bytes:
               <td>
                 <div class="actions">
                   <a class="button" href="{esc(row['url'])}" target="_blank" rel="noreferrer">원문 확인</a>
-                  <form method="post" action="/source-deal-decision"><input type="hidden" name="id" value="{row['id']}"><input type="hidden" name="decision" value="approve_source_deal"><button type="submit" title="사용자 화면의 특가 피드에 이 외부 특가 글을 공개합니다.">특가 승인</button></form>
+                  {approve_control}
                   <form method="post" action="/source-deal-decision"><input type="hidden" name="id" value="{row['id']}"><input type="hidden" name="decision" value="reject_source_deal"><button class="danger" type="submit" title="가격이 애매하거나 특가로 보기 어려우면 오늘 후보에서 제외합니다.">특가 아님</button></form>
                   <form method="post" action="/source-deal-decision"><input type="hidden" name="id" value="{row['id']}"><input type="hidden" name="decision" value="exclude_source_deal"><button class="danger" type="submit" title="광고, 다른 제품, 낚시성 글처럼 앞으로 기준으로 삼기 어려운 소스를 제외합니다.">소스 제외</button></form>
                 </div>

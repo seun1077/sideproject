@@ -26,6 +26,7 @@ def upsert_default_sources(conn: sqlite3.Connection) -> None:
     sources = [
         ("danawa", "Danawa", "marketplace", "https://www.danawa.com", "https://www.danawa.com/robots.txt", "public_search_probe"),
         ("algumon", "Algumon", "deal_aggregator", "https://www.algumon.com", "https://www.algumon.com/robots.txt", "public_pages_no_api"),
+        ("theqoo", "TheQoo Ddeokdeal", "community", "https://theqoo.net/theqdeal", "https://theqoo.net/robots.txt", "public_board_probe"),
         ("oliveyoung", "Olive Young", "marketplace", "https://www.oliveyoung.co.kr", "https://www.oliveyoung.co.kr/robots.txt", "blocked_skip"),
         ("musinsa", "Musinsa", "marketplace", "https://www.musinsa.com", "https://www.musinsa.com/robots.txt", "review_before_collect"),
     ]
@@ -282,4 +283,3 @@ def upsert_deal_post(conn: sqlite3.Connection, post: DealPostCandidate, collecte
             (source_id, source_post_key),
         ).fetchone()
     return int(row["id"])
-

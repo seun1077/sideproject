@@ -167,6 +167,30 @@ class AdminWorkflowTest(unittest.TestCase):
         self.assertEqual(status, "approved")
         self.assertEqual(reviewed, 1)
 
+    def test_source_deal_without_product_cannot_be_publicly_approved(self) -> None:
+        with make_conn() as conn:
+            source_id = conn.execute("SELECT id FROM sources WHERE code = 'algumon'").fetchone()["id"]
+            deal_post_id = conn.execute(
+                """
+                INSERT INTO deal_posts (
+                    source_id, source_post_key, product_id, title, url, collected_at,
+                    extracted_price_krw, matched_keywords, match_score
+                )
+                VALUES (?, 'post-2', NULL, '바이오던스 겔마스크팩 23000원',
+                        'https://example.com/deal2', '2026-06-15T00:00:00Z',
+                        23000, '마스크팩', 0)
+                RETURNING id
+                """,
+                (source_id,),
+            ).fetchone()["id"]
+
+            with self.assertRaises(ValueError):
+                decide_source_deal(conn, deal_post_id, "approve_source_deal")
+
+            status = conn.execute("SELECT match_status FROM deal_posts WHERE id = ?", (deal_post_id,)).fetchone()[0]
+
+        self.assertEqual(status, "candidate")
+
 
 if __name__ == "__main__":
     unittest.main()

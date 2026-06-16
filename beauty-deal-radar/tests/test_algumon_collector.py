@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from beauty_deal_radar.collectors.algumon import _match_seed
+from beauty_deal_radar.collectors.deal_match import looks_like_beauty_deal
 from beauty_deal_radar.models import ProductSeed
 
 
@@ -34,6 +35,11 @@ class AlgumonCollectorTest(unittest.TestCase):
 
         self.assertGreaterEqual(score, 80)
         self.assertIn("코스알엑스", keywords)
+
+    def test_beauty_terms_can_enter_source_queue_before_product_match(self) -> None:
+        self.assertTrue(looks_like_beauty_deal("직잭 바이오던스 겔마스크팩 16매입 23,000원"))
+        self.assertTrue(looks_like_beauty_deal("생활용품 지마켓 디스크 바른요 허리 보호대 22,410원"))
+        self.assertFalse(looks_like_beauty_deal("국내산 한돈 오겹살 구이용 15,630원"))
 
 
 if __name__ == "__main__":

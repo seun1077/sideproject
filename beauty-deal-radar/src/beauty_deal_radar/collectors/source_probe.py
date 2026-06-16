@@ -10,6 +10,8 @@ TARGETS = [
     ("algumon", "https://www.algumon.com/n/deal"),
     ("danawa", "https://www.danawa.com/robots.txt"),
     ("danawa", "https://search.danawa.com/dsearch.php?query=%EC%84%A0%ED%81%AC%EB%A6%BC"),
+    ("theqoo", "https://theqoo.net/robots.txt"),
+    ("theqoo", "https://theqoo.net/theqdeal"),
     ("oliveyoung", "https://www.oliveyoung.co.kr/robots.txt"),
     ("musinsa", "https://www.musinsa.com/robots.txt"),
 ]
@@ -38,4 +40,3 @@ def probe_sources(stamp: str | None = None) -> list[dict]:
             }
         )
     return rows
-

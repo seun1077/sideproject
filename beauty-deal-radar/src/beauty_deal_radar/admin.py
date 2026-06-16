@@ -425,6 +425,13 @@ def decide_source_deal(
     }
     if decision not in status_by_decision:
         raise ValueError(f"Unsupported source deal decision: {decision}")
+    if decision == "approve_source_deal":
+        row = conn.execute(
+            "SELECT product_id FROM deal_posts WHERE id = ?",
+            (deal_post_id,),
+        ).fetchone()
+        if not row or row["product_id"] is None:
+            raise ValueError("상품 매칭이 없는 특가 소스는 아직 공개 승인할 수 없습니다.")
     status = status_by_decision[decision]
     with conn:
         conn.execute(

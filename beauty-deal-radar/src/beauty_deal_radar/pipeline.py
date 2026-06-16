@@ -4,7 +4,7 @@ import traceback
 from pathlib import Path
 
 from . import __version__
-from .collectors import collect_algumon_latest, collect_danawa_for_seed, probe_sources
+from .collectors import collect_algumon_latest, collect_danawa_for_seed, collect_theqoo_deals, probe_sources
 from .collectors.shared import collected_at_iso, now_stamp
 from .csv_io import write_csv, write_json
 from .db import apply_migrations, connect
@@ -66,6 +66,7 @@ def run_collection(
     seeds = read_seeds()
     raw_dir = RAW / "danawa" if keep_raw else None
     raw_algumon = RAW / f"algumon_latest_{stamp}.html" if keep_raw else None
+    raw_theqoo = RAW / f"theqoo_deals_{stamp}.html" if keep_raw else None
 
     with connect(db_path) as conn:
         apply_migrations(conn)
@@ -99,7 +100,9 @@ def run_collection(
                 upsert_offer(conn, run_id, offer, collected_at)
                 offer_rows.append(offer_to_row(offer, collected_at))
 
-            posts = collect_algumon_latest(seeds, raw_path=raw_algumon)
+            algumon_posts = collect_algumon_latest(seeds, raw_path=raw_algumon)
+            theqoo_posts = collect_theqoo_deals(seeds, raw_path=raw_theqoo)
+            posts = [*algumon_posts, *theqoo_posts]
             for post in posts:
                 upsert_deal_post(conn, post, collected_at)
                 post_rows.append(post_to_row(post, collected_at))
@@ -130,7 +133,9 @@ def run_collection(
         "db_path": str(db_path),
         "seed_count": len(seeds),
         "danawa_offer_rows": len(offer_rows),
-        "algumon_deal_posts": len(post_rows),
+        "algumon_deal_posts": len([row for row in post_rows if row["source"] == "algumon"]),
+        "theqoo_deal_posts": len([row for row in post_rows if row["source"] == "theqoo"]),
+        "source_deal_posts": len(post_rows),
         "deal_evaluations": len(report_rows),
         "top_deal_candidates": len([row for row in report_rows if (row["discount_vs_market_pct"] or 0) >= 15]),
         "csv_outputs_written": write_csv_outputs,

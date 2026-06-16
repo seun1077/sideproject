@@ -271,6 +271,7 @@ def list_source_deals(
         params.append(category)
     if visibility == "public":
         where.append("dp.match_status = 'approved'")
+        where.append("dp.product_id IS NOT NULL")
     elif visibility == "review":
         where.append("dp.match_status = 'candidate'")
     rows = conn.execute(
